@@ -133,6 +133,10 @@ export interface StoryNode {
   collectClues?: string[];
   unlockLogId?: string;
   hiddenTriggers?: string[];
+  sendMessages?: string[];
+  triggerCall?: string;
+  triggerTask?: string;
+  unlockContact?: string;
 }
 
 export interface StoryPackage {
@@ -156,6 +160,7 @@ export interface StoryPackage {
   encodedLogs?: EncodedLog[];
   keywords?: KeywordCondition[];
   hiddenNodeTriggers?: HiddenNodeTrigger[];
+  communication?: CommunicationPackage;
 }
 
 export interface StoryPackageSummary {
@@ -197,6 +202,116 @@ export interface SaveData {
   decodedLogs: string[];
   verifiedKeywords: string[];
   triggeredHiddenNodes: string[];
+  unlockedContacts: string[];
+  readMessages: string[];
+  answeredCalls: string[];
+  rejectedCalls: string[];
+  acceptedTasks: string[];
+  completedTasks: string[];
+  failedTasks: string[];
+  triggeredCommunications: string[];
+}
+
+export type ContactStatus = 'online' | 'offline' | 'busy' | 'away' | 'hidden';
+export type MessageType = 'text' | 'image' | 'audio' | 'file' | 'system';
+export type CallStatus = 'incoming' | 'ringing' | 'connected' | 'ended' | 'missed' | 'rejected';
+export type TaskStatus = 'pending' | 'accepted' | 'in_progress' | 'completed' | 'failed' | 'expired';
+export type TaskPriority = 'low' | 'medium' | 'high' | 'critical';
+
+export interface Contact {
+  id: string;
+  name: string;
+  avatar?: string;
+  status: ContactStatus;
+  statusMessage?: string;
+  factionId?: string;
+  description?: string;
+  isUnlocked?: boolean;
+  unlockCondition?: string;
+  lastSeen?: number;
+  priority?: number;
+}
+
+export interface Message {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  receiverId: string;
+  content: string;
+  type: MessageType;
+  timestamp: number;
+  isRead: boolean;
+  glitchLevel?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface Conversation {
+  id: string;
+  contactId: string;
+  messages: Message[];
+  lastMessageAt: number;
+  isArchived?: boolean;
+  unreadCount: number;
+}
+
+export interface IncomingCall {
+  id: string;
+  callerId: string;
+  callType: 'voice' | 'video' | 'holo';
+  status: CallStatus;
+  startTime?: number;
+  endTime?: number;
+  duration?: number;
+  autoAnswer?: boolean;
+  autoAnswerDelay?: number;
+  canReject?: boolean;
+  glitchLevel?: number;
+  nextNodeIdOnAnswer?: string;
+  nextNodeIdOnReject?: string;
+  reputationChangesOnAnswer?: FactionReputationChange[];
+  reputationChangesOnReject?: FactionReputationChange[];
+  setFlagOnAnswer?: string;
+  setFlagOnReject?: string;
+}
+
+export interface BranchTask {
+  id: string;
+  title: string;
+  description: string;
+  issuerId: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  deadline?: number;
+  createdAt: number;
+  acceptedAt?: number;
+  completedAt?: number;
+  requiredClueIds?: string[];
+  requiredKeywordIds?: string[];
+  requiredReputation?: ReputationCondition[];
+  requiredFlags?: string[];
+  rewardClueIds?: string[];
+  rewardFlags?: string[];
+  rewardReputation?: FactionReputationChange[];
+  nextNodeIdOnAccept?: string;
+  nextNodeIdOnComplete?: string;
+  nextNodeIdOnReject?: string;
+  failureNodeId?: string;
+  isHidden?: boolean;
+  unlockCondition?: string;
+}
+
+export interface CommunicationTrigger {
+  id: string;
+  type: 'message' | 'call' | 'task' | 'contact_unlock';
+  targetId: string;
+  delay?: number;
+  triggerNodeId?: string;
+  triggerFlag?: string;
+  requiredClueIds?: string[];
+  requiredKeywordIds?: string[];
+  requiredReputation?: ReputationCondition[];
+  isOneTime?: boolean;
+  hasTriggered?: boolean;
 }
 
 export interface FactionStats {
@@ -220,4 +335,12 @@ export interface GameStats {
 
 export interface AllStats {
   [storyPackageId: string]: GameStats;
+}
+
+export interface CommunicationPackage {
+  contacts: Contact[];
+  conversations: Conversation[];
+  incomingCalls: IncomingCall[];
+  branchTasks: BranchTask[];
+  triggers: CommunicationTrigger[];
 }

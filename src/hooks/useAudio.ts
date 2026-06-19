@@ -5,6 +5,8 @@ import {
   playChoiceSound,
   playEndingSound,
   playErrorSound,
+  playMessageSound,
+  playRingSound,
 } from '../utils/audio';
 
 export function useAudio() {
@@ -22,7 +24,7 @@ export function useAudio() {
   }, []);
 
   const play = useCallback(
-    (type: 'typing' | 'glitch' | 'choice' | 'ending' | 'error') => {
+    (type: 'typing' | 'glitch' | 'choice' | 'ending' | 'error' | 'message' | 'ring') => {
       if (isMuted) return;
       switch (type) {
         case 'typing':
@@ -39,6 +41,12 @@ export function useAudio() {
           break;
         case 'error':
           playErrorSound();
+          break;
+        case 'message':
+          playMessageSound();
+          break;
+        case 'ring':
+          playRingSound();
           break;
       }
     },

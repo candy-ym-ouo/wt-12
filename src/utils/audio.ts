@@ -138,3 +138,53 @@ export function playErrorSound(): void {
     /* ignore */
   }
 }
+
+export function playMessageSound(): void {
+  try {
+    const ctx = getContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1200, ctx.currentTime);
+    osc.frequency.setValueAtTime(1600, ctx.currentTime + 0.05);
+
+    gain.gain.setValueAtTime(0.08, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.15);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function playRingSound(): void {
+  try {
+    const ctx = getContext();
+
+    for (let i = 0; i < 3; i++) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(800, ctx.currentTime + i * 0.3);
+      osc.frequency.setValueAtTime(600, ctx.currentTime + i * 0.3 + 0.1);
+
+      gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.3);
+      gain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + i * 0.3 + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.3 + 0.2);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(ctx.currentTime + i * 0.3);
+      osc.stop(ctx.currentTime + i * 0.3 + 0.2);
+    }
+  } catch {
+    /* ignore */
+  }
+}

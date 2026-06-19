@@ -9,6 +9,12 @@ import type {
   EncodedLog,
   EvidenceClue,
   HiddenNodeTrigger,
+  Contact,
+  Message,
+  Conversation,
+  IncomingCall,
+  BranchTask,
+  CommunicationTrigger,
 } from '../data/types';
 import {
   saveGame,
@@ -40,6 +46,19 @@ interface GameStore {
   verifiedKeywords: Set<string>;
   triggeredHiddenNodes: Set<string>;
   pendingHiddenTriggers: string[];
+  unlockedContacts: Set<string>;
+  readMessages: Set<string>;
+  answeredCalls: Set<string>;
+  rejectedCalls: Set<string>;
+  acceptedTasks: Set<string>;
+  completedTasks: Set<string>;
+  failedTasks: Set<string>;
+  triggeredCommunications: Set<string>;
+  activeCall: IncomingCall | null;
+  pendingCalls: IncomingCall[];
+  pendingTasks: string[];
+  pendingMessages: string[];
+  currentConversationId: string | null;
 
   setStoryPackage: (pkg: StoryPackage) => void;
   goToNode: (nodeId: string, choiceId?: string) => void;
@@ -71,6 +90,35 @@ interface GameStore {
   getClueById: (clueId: string) => EvidenceClue | null;
   getLogById: (logId: string) => EncodedLog | null;
   getTriggerById: (triggerId: string) => HiddenNodeTrigger | null;
+  getContacts: () => Contact[];
+  getContactById: (contactId: string) => Contact | null;
+  unlockContact: (contactId: string) => boolean;
+  isContactUnlocked: (contactId: string) => boolean;
+  updateContactStatus: (contactId: string, status: Contact['status']) => void;
+  getConversations: () => Conversation[];
+  getConversationById: (conversationId: string) => Conversation | null;
+  getConversationByContactId: (contactId: string) => Conversation | null;
+  sendMessage: (conversationId: string, content: string) => Message | null;
+  markMessageAsRead: (messageId: string) => void;
+  markConversationAsRead: (conversationId: string) => void;
+  setCurrentConversation: (conversationId: string | null) => void;
+  getUnreadMessageCount: () => number;
+  triggerIncomingCall: (callId: string) => IncomingCall | null;
+  answerCall: (callId: string) => boolean;
+  rejectCall: (callId: string) => boolean;
+  endCall: () => void;
+  getPendingCalls: () => IncomingCall[];
+  getTasks: () => BranchTask[];
+  getTaskById: (taskId: string) => BranchTask | null;
+  acceptTask: (taskId: string) => boolean;
+  completeTask: (taskId: string) => boolean;
+  failTask: (taskId: string) => boolean;
+  rejectTask: (taskId: string) => void;
+  checkTaskRequirements: (task: BranchTask) => boolean;
+  checkCommunicationTriggers: () => string[];
+  processNodeCommunication: (nodeId: string) => void;
+  dismissPendingTask: (taskId: string) => void;
+  dismissPendingMessage: (messageId: string) => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -90,6 +138,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
   verifiedKeywords: new Set(),
   triggeredHiddenNodes: new Set(),
   pendingHiddenTriggers: [],
+  unlockedContacts: new Set(),
+  readMessages: new Set(),
+  answeredCalls: new Set(),
+  rejectedCalls: new Set(),
+  acceptedTasks: new Set(),
+  completedTasks: new Set(),
+  failedTasks: new Set(),
+  triggeredCommunications: new Set(),
+  activeCall: null,
+  pendingCalls: [],
+  pendingTasks: [],
+  pendingMessages: [],
+  currentConversationId: null,
 
   setStoryPackage: (pkg) => {
     const stats = getStats(pkg.id);
@@ -103,6 +164,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    const initialUnlockedContacts = new Set<string>();
+    if (pkg.communication?.contacts) {
+      for (const contact of pkg.communication.contacts) {
+        if (contact.isUnlocked && !contact.unlockCondition) {
+          initialUnlockedContacts.add(contact.id);
+        }
+      }
+    }
+
     set({
       storyPackage: pkg,
       totalEndings: pkg.endings.length,
@@ -110,6 +180,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       totalPlays: stats.totalPlays,
       isLoaded: true,
       reputation: initialReputation,
+      unlockedContacts: initialUnlockedContacts,
     });
   },
 
@@ -155,6 +226,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (node.hiddenTriggers && node.hiddenTriggers.length > 0) {
       get().checkHiddenNodeTriggers();
     }
+
+    get().processNodeCommunication(nodeId);
+    get().checkCommunicationTriggers();
   },
 
   setFlag: (flag) => {
@@ -182,6 +256,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    const initialUnlockedContacts = new Set<string>();
+    if (storyPackage.communication?.contacts) {
+      for (const contact of storyPackage.communication.contacts) {
+        if (contact.isUnlocked && !contact.unlockCondition) {
+          initialUnlockedContacts.add(contact.id);
+        }
+      }
+    }
+
     set({
       currentNodeId: storyPackage.startNodeId,
       chapter: 1,
@@ -196,6 +279,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
       verifiedKeywords: new Set(),
       triggeredHiddenNodes: new Set(),
       pendingHiddenTriggers: [],
+      unlockedContacts: initialUnlockedContacts,
+      readMessages: new Set(),
+      answeredCalls: new Set(),
+      rejectedCalls: new Set(),
+      acceptedTasks: new Set(),
+      completedTasks: new Set(),
+      failedTasks: new Set(),
+      triggeredCommunications: new Set(),
+      activeCall: null,
+      pendingCalls: [],
+      pendingTasks: [],
+      pendingMessages: [],
+      currentConversationId: null,
     });
   },
 
@@ -207,7 +303,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   saveToStorage: () => {
-    const { storyPackage, currentNodeId, chapter, flags, unlockedEndings, playHistory, reputation, collectedClues, decodedLogs, verifiedKeywords, triggeredHiddenNodes } = get();
+    const {
+      storyPackage,
+      currentNodeId,
+      chapter,
+      flags,
+      unlockedEndings,
+      playHistory,
+      reputation,
+      collectedClues,
+      decodedLogs,
+      verifiedKeywords,
+      triggeredHiddenNodes,
+      unlockedContacts,
+      readMessages,
+      answeredCalls,
+      rejectedCalls,
+      acceptedTasks,
+      completedTasks,
+      failedTasks,
+      triggeredCommunications,
+    } = get();
     if (!storyPackage) return;
     const data: SaveData = {
       storyPackageId: storyPackage.id,
@@ -222,6 +338,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       decodedLogs: Array.from(decodedLogs),
       verifiedKeywords: Array.from(verifiedKeywords),
       triggeredHiddenNodes: Array.from(triggeredHiddenNodes),
+      unlockedContacts: Array.from(unlockedContacts),
+      readMessages: Array.from(readMessages),
+      answeredCalls: Array.from(answeredCalls),
+      rejectedCalls: Array.from(rejectedCalls),
+      acceptedTasks: Array.from(acceptedTasks),
+      completedTasks: Array.from(completedTasks),
+      failedTasks: Array.from(failedTasks),
+      triggeredCommunications: Array.from(triggeredCommunications),
     };
     saveGame(data);
   },
@@ -240,6 +364,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    const initialUnlockedContacts = new Set(data.unlockedContacts ?? []);
+    if (storyPackage?.communication?.contacts && initialUnlockedContacts.size === 0) {
+      for (const contact of storyPackage.communication.contacts) {
+        if (contact.isUnlocked && !contact.unlockCondition) {
+          initialUnlockedContacts.add(contact.id);
+        }
+      }
+    }
+
     set({
       currentNodeId: data.currentNodeId,
       chapter: data.chapter,
@@ -253,6 +386,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
       verifiedKeywords: new Set(data.verifiedKeywords ?? []),
       triggeredHiddenNodes: new Set(data.triggeredHiddenNodes ?? []),
       pendingHiddenTriggers: [],
+      unlockedContacts: initialUnlockedContacts,
+      readMessages: new Set(data.readMessages ?? []),
+      answeredCalls: new Set(data.answeredCalls ?? []),
+      rejectedCalls: new Set(data.rejectedCalls ?? []),
+      acceptedTasks: new Set(data.acceptedTasks ?? []),
+      completedTasks: new Set(data.completedTasks ?? []),
+      failedTasks: new Set(data.failedTasks ?? []),
+      triggeredCommunications: new Set(data.triggeredCommunications ?? []),
+      activeCall: null,
+      pendingCalls: [],
+      pendingTasks: [],
+      pendingMessages: [],
+      currentConversationId: null,
     });
     return true;
   },
@@ -276,6 +422,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
         initialReputation[faction.id] = faction.initialReputation;
       }
     }
+    const initialUnlockedContacts = new Set<string>();
+    if (storyPackage?.communication?.contacts) {
+      for (const contact of storyPackage.communication.contacts) {
+        if (contact.isUnlocked && !contact.unlockCondition) {
+          initialUnlockedContacts.add(contact.id);
+        }
+      }
+    }
     set({
       currentNodeId: '',
       chapter: 1,
@@ -288,6 +442,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
       verifiedKeywords: new Set(),
       triggeredHiddenNodes: new Set(),
       pendingHiddenTriggers: [],
+      unlockedContacts: initialUnlockedContacts,
+      readMessages: new Set(),
+      answeredCalls: new Set(),
+      rejectedCalls: new Set(),
+      acceptedTasks: new Set(),
+      completedTasks: new Set(),
+      failedTasks: new Set(),
+      triggeredCommunications: new Set(),
+      activeCall: null,
+      pendingCalls: [],
+      pendingTasks: [],
+      pendingMessages: [],
+      currentConversationId: null,
     });
   },
 
@@ -309,6 +476,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
       verifiedKeywords: new Set(),
       triggeredHiddenNodes: new Set(),
       pendingHiddenTriggers: [],
+      unlockedContacts: new Set(),
+      readMessages: new Set(),
+      answeredCalls: new Set(),
+      rejectedCalls: new Set(),
+      acceptedTasks: new Set(),
+      completedTasks: new Set(),
+      failedTasks: new Set(),
+      triggeredCommunications: new Set(),
+      activeCall: null,
+      pendingCalls: [],
+      pendingTasks: [],
+      pendingMessages: [],
+      currentConversationId: null,
     });
   },
 
@@ -577,5 +757,442 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   getTriggerById: (triggerId) => {
     return get().storyPackage?.hiddenNodeTriggers?.find((t) => t.id === triggerId) ?? null;
+  },
+
+  getContacts: () => {
+    const { storyPackage, unlockedContacts } = get();
+    if (!storyPackage?.communication?.contacts) return [];
+    return storyPackage.communication.contacts
+      .filter((c) => unlockedContacts.has(c.id) || (c.isUnlocked && !c.unlockCondition))
+      .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0));
+  },
+
+  getContactById: (contactId) => {
+    const { storyPackage, unlockedContacts } = get();
+    const contact = storyPackage?.communication?.contacts?.find((c) => c.id === contactId);
+    if (!contact) return null;
+    if (!unlockedContacts.has(contactId) && !(contact.isUnlocked && !contact.unlockCondition)) return null;
+    return contact;
+  },
+
+  unlockContact: (contactId) => {
+    const { unlockedContacts, storyPackage } = get();
+    if (unlockedContacts.has(contactId)) return false;
+    const contact = storyPackage?.communication?.contacts?.find((c) => c.id === contactId);
+    if (!contact) return false;
+    if (contact.unlockCondition && !get().hasFlag(contact.unlockCondition)) return false;
+    const newUnlocked = new Set(unlockedContacts);
+    newUnlocked.add(contactId);
+    set({ unlockedContacts: newUnlocked });
+    return true;
+  },
+
+  isContactUnlocked: (contactId) => {
+    const { unlockedContacts, storyPackage } = get();
+    if (unlockedContacts.has(contactId)) return true;
+    const contact = storyPackage?.communication?.contacts?.find((c) => c.id === contactId);
+    return !!(contact?.isUnlocked && !contact.unlockCondition);
+  },
+
+  updateContactStatus: (contactId, status) => {
+    const { storyPackage } = get();
+    if (!storyPackage?.communication?.contacts) return;
+    const contacts = storyPackage.communication.contacts.map((c) =>
+      c.id === contactId ? { ...c, status, lastSeen: Date.now() } : c
+    );
+    set({
+      storyPackage: {
+        ...storyPackage,
+        communication: {
+          ...storyPackage.communication,
+          contacts,
+        },
+      },
+    });
+  },
+
+  getConversations: () => {
+    const { storyPackage, unlockedContacts } = get();
+    if (!storyPackage?.communication?.conversations) return [];
+    return storyPackage.communication.conversations
+      .filter((c) => unlockedContacts.has(c.contactId))
+      .sort((a, b) => b.lastMessageAt - a.lastMessageAt);
+  },
+
+  getConversationById: (conversationId) => {
+    return get().storyPackage?.communication?.conversations?.find((c) => c.id === conversationId) ?? null;
+  },
+
+  getConversationByContactId: (contactId) => {
+    return get().storyPackage?.communication?.conversations?.find((c) => c.contactId === contactId) ?? null;
+  },
+
+  sendMessage: (conversationId, content) => {
+    const { storyPackage, currentConversationId } = get();
+    if (!storyPackage?.communication?.conversations) return null;
+    const conversation = storyPackage.communication.conversations.find((c) => c.id === conversationId);
+    if (!conversation) return null;
+
+    const newMessage: Message = {
+      id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      conversationId,
+      senderId: 'player',
+      receiverId: conversation.contactId,
+      content,
+      type: 'text',
+      timestamp: Date.now(),
+      isRead: true,
+    };
+
+    const updatedConversations = storyPackage.communication.conversations.map((c) => {
+      if (c.id === conversationId) {
+        return {
+          ...c,
+          messages: [...c.messages, newMessage],
+          lastMessageAt: Date.now(),
+        };
+      }
+      return c;
+    });
+
+    set({
+      storyPackage: {
+        ...storyPackage,
+        communication: {
+          ...storyPackage.communication,
+          conversations: updatedConversations,
+        },
+      },
+      currentConversationId: currentConversationId ?? conversationId,
+    });
+
+    return newMessage;
+  },
+
+  markMessageAsRead: (messageId) => {
+    const { readMessages, storyPackage } = get();
+    if (readMessages.has(messageId)) return;
+    const newRead = new Set(readMessages);
+    newRead.add(messageId);
+    set({ readMessages: newRead });
+
+    if (!storyPackage?.communication?.conversations) return;
+    const updatedConversations = storyPackage.communication.conversations.map((c) => ({
+      ...c,
+      messages: c.messages.map((m) => (m.id === messageId ? { ...m, isRead: true } : m)),
+      unreadCount: c.messages.filter((m) => !m.isRead && m.id !== messageId).length,
+    }));
+    set({
+      storyPackage: {
+        ...storyPackage,
+        communication: {
+          ...storyPackage.communication,
+          conversations: updatedConversations,
+        },
+      },
+    });
+  },
+
+  markConversationAsRead: (conversationId) => {
+    const { storyPackage, readMessages } = get();
+    if (!storyPackage?.communication?.conversations) return;
+    const conversation = storyPackage.communication.conversations.find((c) => c.id === conversationId);
+    if (!conversation) return;
+
+    const newRead = new Set(readMessages);
+    conversation.messages.forEach((m) => newRead.add(m.id));
+    set({ readMessages: newRead });
+
+    const updatedConversations = storyPackage.communication.conversations.map((c) =>
+      c.id === conversationId ? { ...c, unreadCount: 0, messages: c.messages.map((m) => ({ ...m, isRead: true })) } : c
+    );
+    set({
+      storyPackage: {
+        ...storyPackage,
+        communication: {
+          ...storyPackage.communication,
+          conversations: updatedConversations,
+        },
+      },
+    });
+  },
+
+  setCurrentConversation: (conversationId) => {
+    set({ currentConversationId: conversationId });
+    if (conversationId) {
+      get().markConversationAsRead(conversationId);
+    }
+  },
+
+  getUnreadMessageCount: () => {
+    const { storyPackage } = get();
+    if (!storyPackage?.communication?.conversations) return 0;
+    return storyPackage.communication.conversations.reduce((acc, c) => acc + c.unreadCount, 0);
+  },
+
+  triggerIncomingCall: (callId) => {
+    const { storyPackage, pendingCalls, activeCall } = get();
+    if (activeCall) return null;
+    const call = storyPackage?.communication?.incomingCalls?.find((c) => c.id === callId);
+    if (!call) return null;
+    const newCall: IncomingCall = { ...call, status: 'ringing', startTime: Date.now() };
+    set({
+      pendingCalls: [...pendingCalls, newCall],
+      activeCall: newCall,
+    });
+    return newCall;
+  },
+
+  answerCall: (callId) => {
+    const { activeCall, pendingCalls } = get();
+    if (!activeCall || activeCall.id !== callId) return false;
+    if (activeCall.reputationChangesOnAnswer) {
+      get().changeReputation(activeCall.reputationChangesOnAnswer);
+    }
+    if (activeCall.setFlagOnAnswer) {
+      get().setFlag(activeCall.setFlagOnAnswer);
+    }
+    const newAnswered = new Set(get().answeredCalls);
+    newAnswered.add(callId);
+    set({
+      answeredCalls: newAnswered,
+      activeCall: { ...activeCall, status: 'connected' },
+      pendingCalls: pendingCalls.filter((c) => c.id !== callId),
+    });
+    if (activeCall.nextNodeIdOnAnswer) {
+      get().goToNode(activeCall.nextNodeIdOnAnswer);
+    }
+    return true;
+  },
+
+  rejectCall: (callId) => {
+    const { activeCall, pendingCalls } = get();
+    if (!activeCall || activeCall.id !== callId) return false;
+    if (activeCall.reputationChangesOnReject) {
+      get().changeReputation(activeCall.reputationChangesOnReject);
+    }
+    if (activeCall.setFlagOnReject) {
+      get().setFlag(activeCall.setFlagOnReject);
+    }
+    const newRejected = new Set(get().rejectedCalls);
+    newRejected.add(callId);
+    set({
+      rejectedCalls: newRejected,
+      activeCall: null,
+      pendingCalls: pendingCalls.filter((c) => c.id !== callId),
+    });
+    if (activeCall.nextNodeIdOnReject) {
+      get().goToNode(activeCall.nextNodeIdOnReject);
+    }
+    return true;
+  },
+
+  endCall: () => {
+    const { activeCall } = get();
+    if (!activeCall) return;
+    set({
+      activeCall: null,
+    });
+  },
+
+  getPendingCalls: () => {
+    return get().pendingCalls;
+  },
+
+  getTasks: () => {
+    const { storyPackage, acceptedTasks, completedTasks, failedTasks, triggeredCommunications } = get();
+    if (!storyPackage?.communication?.branchTasks) return [];
+    return storyPackage.communication.branchTasks.filter((task) => {
+      if (task.isHidden && !triggeredCommunications.has(task.id)) return false;
+      if (task.unlockCondition && !get().hasFlag(task.unlockCondition)) return false;
+      return acceptedTasks.has(task.id) || completedTasks.has(task.id) || failedTasks.has(task.id) || task.status === 'pending';
+    });
+  },
+
+  getTaskById: (taskId) => {
+    return get().storyPackage?.communication?.branchTasks?.find((t) => t.id === taskId) ?? null;
+  },
+
+  checkTaskRequirements: (task) => {
+    const { collectedClues, verifiedKeywords } = get();
+    if (task.requiredClueIds) {
+      for (const clueId of task.requiredClueIds) {
+        if (!collectedClues.has(clueId)) return false;
+      }
+    }
+    if (task.requiredKeywordIds) {
+      for (const kwId of task.requiredKeywordIds) {
+        if (!verifiedKeywords.has(kwId)) return false;
+      }
+    }
+    if (task.requiredReputation) {
+      if (!get().checkReputationConditions(task.requiredReputation)) return false;
+    }
+    if (task.requiredFlags) {
+      for (const flag of task.requiredFlags) {
+        if (!get().hasFlag(flag)) return false;
+      }
+    }
+    return true;
+  },
+
+  acceptTask: (taskId) => {
+    const { acceptedTasks, storyPackage, pendingTasks } = get();
+    if (acceptedTasks.has(taskId)) return false;
+    const task = storyPackage?.communication?.branchTasks?.find((t) => t.id === taskId);
+    if (!task) return false;
+    if (!get().checkTaskRequirements(task)) return false;
+    const newAccepted = new Set(acceptedTasks);
+    newAccepted.add(taskId);
+    set({
+      acceptedTasks: newAccepted,
+      pendingTasks: pendingTasks.filter((id) => id !== taskId),
+    });
+    if (task.nextNodeIdOnAccept) {
+      get().goToNode(task.nextNodeIdOnAccept);
+    }
+    return true;
+  },
+
+  completeTask: (taskId) => {
+    const { completedTasks, acceptedTasks, storyPackage } = get();
+    if (completedTasks.has(taskId)) return false;
+    const task = storyPackage?.communication?.branchTasks?.find((t) => t.id === taskId);
+    if (!task) return false;
+    const newCompleted = new Set(completedTasks);
+    newCompleted.add(taskId);
+    const newAccepted = new Set(acceptedTasks);
+    newAccepted.delete(taskId);
+    set({
+      completedTasks: newCompleted,
+      acceptedTasks: newAccepted,
+    });
+    if (task.rewardClueIds) {
+      for (const clueId of task.rewardClueIds) {
+        get().collectClue(clueId);
+      }
+    }
+    if (task.rewardFlags) {
+      for (const flag of task.rewardFlags) {
+        get().setFlag(flag);
+      }
+    }
+    if (task.rewardReputation) {
+      get().changeReputation(task.rewardReputation);
+    }
+    if (task.nextNodeIdOnComplete) {
+      get().goToNode(task.nextNodeIdOnComplete);
+    }
+    return true;
+  },
+
+  failTask: (taskId) => {
+    const { failedTasks, acceptedTasks, storyPackage } = get();
+    if (failedTasks.has(taskId)) return false;
+    const task = storyPackage?.communication?.branchTasks?.find((t) => t.id === taskId);
+    if (!task) return false;
+    const newFailed = new Set(failedTasks);
+    newFailed.add(taskId);
+    const newAccepted = new Set(acceptedTasks);
+    newAccepted.delete(taskId);
+    set({
+      failedTasks: newFailed,
+      acceptedTasks: newAccepted,
+    });
+    if (task.failureNodeId) {
+      get().goToNode(task.failureNodeId);
+    }
+    return true;
+  },
+
+  rejectTask: (taskId) => {
+    const { pendingTasks, storyPackage } = get();
+    set({
+      pendingTasks: pendingTasks.filter((id) => id !== taskId),
+    });
+    const task = storyPackage?.communication?.branchTasks?.find((t) => t.id === taskId);
+    if (task?.nextNodeIdOnReject) {
+      get().goToNode(task.nextNodeIdOnReject);
+    }
+  },
+
+  checkCommunicationTriggers: () => {
+    const { storyPackage, triggeredCommunications, currentNodeId, flags, collectedClues, verifiedKeywords, pendingMessages, pendingTasks } = get();
+    if (!storyPackage?.communication?.triggers) return [];
+    const newlyTriggered: string[] = [];
+    for (const trigger of storyPackage.communication.triggers) {
+      if (trigger.isOneTime && triggeredCommunications.has(trigger.id)) continue;
+      if (trigger.triggerNodeId && trigger.triggerNodeId !== currentNodeId) continue;
+      if (trigger.triggerFlag && !flags.has(trigger.triggerFlag)) continue;
+      if (trigger.requiredClueIds) {
+        const hasAll = trigger.requiredClueIds.every((id) => collectedClues.has(id));
+        if (!hasAll) continue;
+      }
+      if (trigger.requiredKeywordIds) {
+        const hasAll = trigger.requiredKeywordIds.every((id) => verifiedKeywords.has(id));
+        if (!hasAll) continue;
+      }
+      if (trigger.requiredReputation) {
+        if (!get().checkReputationConditions(trigger.requiredReputation)) continue;
+      }
+      newlyTriggered.push(trigger.id);
+      const executeTrigger = () => {
+        switch (trigger.type) {
+          case 'message':
+            set({ pendingMessages: [...get().pendingMessages, trigger.targetId] });
+            break;
+          case 'call':
+            get().triggerIncomingCall(trigger.targetId);
+            break;
+          case 'task':
+            set({ pendingTasks: [...get().pendingTasks, trigger.targetId] });
+            break;
+          case 'contact_unlock':
+            get().unlockContact(trigger.targetId);
+            break;
+        }
+      };
+      if (trigger.delay && trigger.delay > 0) {
+        setTimeout(executeTrigger, trigger.delay);
+      } else {
+        executeTrigger();
+      }
+    }
+    if (newlyTriggered.length > 0) {
+      const newTriggered = new Set(triggeredCommunications);
+      for (const id of newlyTriggered) {
+        newTriggered.add(id);
+      }
+      set({ triggeredCommunications: newTriggered });
+    }
+    return newlyTriggered;
+  },
+
+  processNodeCommunication: (nodeId) => {
+    const { storyPackage, pendingMessages, pendingTasks } = get();
+    const node = storyPackage?.nodes[nodeId];
+    if (!node) return;
+    if (node.sendMessages && node.sendMessages.length > 0) {
+      set({ pendingMessages: [...pendingMessages, ...node.sendMessages] });
+    }
+    if (node.triggerCall) {
+      get().triggerIncomingCall(node.triggerCall);
+    }
+    if (node.triggerTask) {
+      set({ pendingTasks: [...pendingTasks, node.triggerTask] });
+    }
+    if (node.unlockContact) {
+      get().unlockContact(node.unlockContact);
+    }
+  },
+
+  dismissPendingTask: (taskId) => {
+    const { pendingTasks } = get();
+    set({ pendingTasks: pendingTasks.filter((id) => id !== taskId) });
+  },
+
+  dismissPendingMessage: (messageId) => {
+    const { pendingMessages } = get();
+    set({ pendingMessages: pendingMessages.filter((id) => id !== messageId) });
   },
 }));

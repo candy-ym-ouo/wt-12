@@ -6,10 +6,12 @@ import { StoryDisplay } from '../components/StoryDisplay';
 import { BranchChoice } from '../components/BranchChoice';
 import { TextInput } from '../components/TextInput';
 import { GlitchText } from '../components/GlitchText';
+import { IncomingCallOverlay } from '../components/IncomingCallOverlay';
+import { CommunicationHUD } from '../components/CommunicationHUD';
 import { useGameStore } from '../store/gameStore';
 import { useAudio } from '../hooks/useAudio';
 import type { StoryNode, Choice, Ending, FactionReputationChange, KeywordCondition } from '../data/types';
-import { ArrowLeft, Save, FileText, Search, Key } from 'lucide-react';
+import { ArrowLeft, Save, FileText, Search, Key, MessageSquare, ClipboardList, UserCheck } from 'lucide-react';
 
 export function GamePage() {
   const navigate = useNavigate();
@@ -29,6 +31,19 @@ export function GamePage() {
     getLogById,
     decodedLogs,
     verifiedKeywords,
+    activeCall,
+    answerCall,
+    rejectCall,
+    pendingMessages,
+    pendingTasks,
+    checkCommunicationTriggers,
+    getContactById,
+    getConversationById,
+    getTaskById,
+    dismissPendingMessage,
+    dismissPendingTask,
+    unlockContact,
+    getUnreadMessageCount,
   } = useGameStore();
 
   const [currentNode, setCurrentNode] = useState<StoryNode | null>(null);
@@ -40,9 +55,15 @@ export function GamePage() {
   const [hiddenTriggerNotice, setHiddenTriggerNotice] = useState<string | null>(null);
   const [logDecodeNotice, setLogDecodeNotice] = useState<string | null>(null);
   const [keywordVerifyNotice, setKeywordVerifyNotice] = useState<KeywordCondition | null>(null);
+  const [newMessageNotice, setNewMessageNotice] = useState<string | null>(null);
+  const [newTaskNotice, setNewTaskNotice] = useState<string | null>(null);
+  const [contactUnlockNotice, setContactUnlockNotice] = useState<string | null>(null);
 
   const prevDecodedLogsRef = useRef<Set<string>>(new Set());
   const prevVerifiedKeywordsRef = useRef<Set<string>>(new Set());
+  const prevPendingMessagesRef = useRef<Set<string>>(new Set());
+  const prevPendingTasksRef = useRef<Set<string>>(new Set());
+  const checkTriggersRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!storyPackage) {
@@ -117,6 +138,84 @@ export function GamePage() {
     }
     prevVerifiedKeywordsRef.current = new Set(verifiedKeywords);
   }, [verifiedKeywords, storyPackage, play]);
+
+  useEffect(() => {
+    checkTriggersRef.current = window.setInterval(() => {
+      checkCommunicationTriggers();
+    }, 2000);
+    return () => {
+      if (checkTriggersRef.current !== null) {
+        window.clearInterval(checkTriggersRef.current);
+      }
+    };
+  }, [checkCommunicationTriggers]);
+
+  useEffect(() => {
+    if (activeCall) {
+      play('ring');
+    }
+  }, [activeCall, play]);
+
+  useEffect(() => {
+    const prevMessages = prevPendingMessagesRef.current;
+    for (const convId of pendingMessages) {
+      if (!prevMessages.has(convId)) {
+        const conv = getConversationById(convId);
+        const contact = conv ? getContactById(conv.contactId) : null;
+        if (contact) {
+          setNewMessageNotice(contact.name);
+          play('message');
+          setTimeout(() => setNewMessageNotice(null), 3000);
+        }
+      }
+    }
+    prevPendingMessagesRef.current = new Set(pendingMessages);
+  }, [pendingMessages, getConversationById, getContactById, play]);
+
+  useEffect(() => {
+    const prevTasks = prevPendingTasksRef.current;
+    for (const taskId of pendingTasks) {
+      if (!prevTasks.has(taskId)) {
+        const task = getTaskById(taskId);
+        if (task) {
+          setNewTaskNotice(task.title);
+          play('glitch');
+          setTimeout(() => setNewTaskNotice(null), 4000);
+        }
+      }
+    }
+    prevPendingTasksRef.current = new Set(pendingTasks);
+  }, [pendingTasks, getTaskById, play]);
+
+  const handleAnswerCall = useCallback(() => {
+    if (activeCall) {
+      play('choice');
+      answerCall(activeCall.id);
+    }
+  }, [activeCall, answerCall, play]);
+
+  const handleRejectCall = useCallback(() => {
+    if (activeCall) {
+      play('error');
+      rejectCall(activeCall.id);
+    }
+  }, [activeCall, rejectCall, play]);
+
+  const handleViewMessages = useCallback(() => {
+    const convId = pendingMessages[0];
+    if (convId) {
+      dismissPendingMessage(convId);
+      navigate(`/chat/${convId}`);
+    }
+  }, [pendingMessages, dismissPendingMessage, navigate]);
+
+  const handleViewTasks = useCallback(() => {
+    const taskId = pendingTasks[0];
+    if (taskId) {
+      dismissPendingTask(taskId);
+      navigate('/tasks');
+    }
+  }, [pendingTasks, dismissPendingTask, navigate]);
 
   const handleTextComplete = useCallback(() => {
     setIsTextComplete(true);
@@ -277,6 +376,43 @@ export function GamePage() {
         </div>
       )}
 
+      {contactUnlockNotice && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-glitch-bg border-2 border-glitch-blue px-4 py-2 text-glitch-blue font-mono text-sm text-shadow-glow-blue animate-glitch-horizontal">
+          <UserCheck className="w-4 h-4 inline mr-2" />
+          新联系人解锁：{contactUnlockNotice}
+        </div>
+      )}
+
+      {newMessageNotice && (
+        <div
+          onClick={handleViewMessages}
+          className="fixed top-16 right-4 z-50 bg-glitch-bg border-2 border-glitch-blue px-4 py-2 text-glitch-blue font-mono text-sm text-shadow-glow-blue animate-glitch-horizontal cursor-pointer hover:bg-glitch-blue/10 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <MessageSquare className="w-4 h-4 animate-pulse" />
+            <div>
+              <div>新消息来自 {newMessageNotice}</div>
+              <div className="text-xs text-glitch-blue/70">点击查看</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {newTaskNotice && (
+        <div
+          onClick={handleViewTasks}
+          className="fixed top-32 right-4 z-50 bg-glitch-bg border-2 border-glitch-magenta px-4 py-2 text-glitch-magenta font-mono text-sm text-shadow-glow-red animate-glitch-horizontal cursor-pointer hover:bg-glitch-magenta/10 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <ClipboardList className="w-4 h-4 animate-pulse" />
+            <div>
+              <div>新任务：{newTaskNotice}</div>
+              <div className="text-xs text-glitch-magenta/70">点击查看</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {reputationNotice && reputationNotice.length > 0 && (
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-glitch-bg border px-4 py-2 font-mono text-sm animate-glitch-horizontal flex flex-col gap-1 min-w-[200px]"
           style={{
@@ -297,7 +433,20 @@ export function GamePage() {
         </div>
       )}
 
-      <div className="flex-1 w-full flex items-center justify-center p-4 sm:p-8">
+      {activeCall && (
+        <IncomingCallOverlay
+          call={activeCall}
+          contact={getContactById(activeCall.callerId)}
+          onAnswer={handleAnswerCall}
+          onReject={handleRejectCall}
+        />
+      )}
+
+      <div className="fixed bottom-4 right-4 z-30">
+        <CommunicationHUD vertical={true} showLabels={false} />
+      </div>
+
+      <div className="flex-1 w-full flex items-center justify-center p-4 sm:p-8 pb-32">
         <TerminalWindow
           title={`node://${currentNode.id} [ch.${currentNode.chapter ?? 1}]`}
           className="w-full"
