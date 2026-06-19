@@ -1,9 +1,56 @@
+export interface FactionReputationChange {
+  factionId: string;
+  change: number;
+}
+
+export interface ReputationCondition {
+  factionId: string;
+  minReputation?: number;
+  maxReputation?: number;
+}
+
 export interface Choice {
   id: string;
   text: string;
   nextId: string;
   condition?: string;
   setFlag?: string;
+  reputationChanges?: FactionReputationChange[];
+  reputationConditions?: ReputationCondition[];
+}
+
+export interface Faction {
+  id: string;
+  name: string;
+  shortName?: string;
+  description?: string;
+  color?: string;
+  icon?: string;
+  initialReputation: number;
+  minReputation?: number;
+  maxReputation?: number;
+  relationships?: FactionRelationship[];
+}
+
+export interface FactionRelationship {
+  targetFactionId: string;
+  type: 'ally' | 'enemy' | 'neutral' | 'rival';
+  reputationTransferRatio?: number;
+}
+
+export interface EndingWeight {
+  endingId: string;
+  baseWeight: number;
+  factionWeights?: {
+    factionId: string;
+    perPoint: number;
+    minReputation?: number;
+    maxReputation?: number;
+  }[];
+  flagWeights?: {
+    flag: string;
+    weight: number;
+  }[];
 }
 
 export interface Ending {
@@ -11,6 +58,7 @@ export interface Ending {
   title: string;
   description: string;
   isHidden?: boolean;
+  relatedFactions?: string[];
 }
 
 export interface ChapterMetadata {
@@ -38,6 +86,7 @@ export interface StoryNode {
   chapter?: number;
   setFlag?: string;
   audioCue?: 'typing' | 'glitch' | 'ambient' | 'ending' | 'none';
+  reputationChanges?: FactionReputationChange[];
 }
 
 export interface StoryPackage {
@@ -55,6 +104,8 @@ export interface StoryPackage {
   nodes: Record<string, StoryNode>;
   endings: Ending[];
   chapters: ChapterMetadata[];
+  factions?: Faction[];
+  endingWeights?: EndingWeight[];
 }
 
 export interface StoryPackageSummary {
@@ -69,12 +120,18 @@ export interface StoryPackageSummary {
   estimatedPlaytime?: string;
   totalEndings: number;
   totalChapters: number;
+  totalFactions?: number;
 }
 
 export interface HistoryEntry {
   nodeId: string;
   choiceId?: string;
   timestamp: number;
+  reputationChanges?: FactionReputationChange[];
+}
+
+export interface FactionReputation {
+  [factionId: string]: number;
 }
 
 export interface SaveData {
@@ -85,6 +142,13 @@ export interface SaveData {
   unlockedEndings: string[];
   playHistory: HistoryEntry[];
   savedAt: number;
+  reputation: FactionReputation;
+}
+
+export interface FactionStats {
+  maxReputation: number;
+  minReputation: number;
+  totalChanges: number;
 }
 
 export interface GameStats {
@@ -94,6 +158,10 @@ export interface GameStats {
   totalEndings: number;
   completedChapters: number[];
   totalPlayTime: number;
+  factionStats?: {
+    [factionId: string]: FactionStats;
+  };
+  totalReputationChanges?: number;
 }
 
 export interface AllStats {

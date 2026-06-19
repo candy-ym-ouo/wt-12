@@ -28,6 +28,7 @@ export const storyPackageSummaries: StoryPackageSummary[] = storyPackages.map(
     estimatedPlaytime: pkg.estimatedPlaytime,
     totalEndings: pkg.endings.length,
     totalChapters: pkg.chapters.length,
+    totalFactions: pkg.factions?.length ?? 0,
   })
 );
 

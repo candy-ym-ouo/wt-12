@@ -10,10 +10,19 @@ interface BranchChoiceProps {
 
 export function BranchChoice({ choices, onSelect, disabled = false }: BranchChoiceProps) {
   const hasFlag = useGameStore((s) => s.hasFlag);
+  const checkReputationConditions = useGameStore((s) => s.checkReputationConditions);
 
-  const availableChoices = choices.filter(
-    (choice) => !choice.condition || hasFlag(choice.condition)
-  );
+  const availableChoices = choices.filter((choice) => {
+    if (choice.condition && !hasFlag(choice.condition)) {
+      return false;
+    }
+    if (choice.reputationConditions && choice.reputationConditions.length > 0) {
+      if (!checkReputationConditions(choice.reputationConditions)) {
+        return false;
+      }
+    }
+    return true;
+  });
 
   if (availableChoices.length === 0) {
     return (

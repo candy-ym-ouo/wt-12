@@ -1,4 +1,4 @@
-import type { SaveData, GameStats, AllStats } from '../data/types';
+import type { SaveData, GameStats, AllStats, FactionReputation, FactionStats } from '../data/types';
 
 const SAVE_KEY_PREFIX = 'glitch_adventure_save_';
 const ALL_STATS_KEY = 'glitch_adventure_all_stats';
@@ -21,7 +21,11 @@ export function loadGame(storyPackageId: string): SaveData | null {
     const key = getSaveKey(storyPackageId);
     const raw = localStorage.getItem(key);
     if (!raw) return null;
-    return JSON.parse(raw) as SaveData;
+    const parsed = JSON.parse(raw) as SaveData & { reputation?: FactionReputation };
+    if (!parsed.reputation) {
+      parsed.reputation = {};
+    }
+    return parsed;
   } catch (e) {
     console.error('Failed to load game:', e);
     return null;
@@ -83,6 +87,8 @@ export function getStats(storyPackageId: string): GameStats {
       totalEndings: 0,
       completedChapters: [],
       totalPlayTime: 0,
+      factionStats: {},
+      totalReputationChanges: 0,
     }
   );
 }
@@ -139,4 +145,65 @@ export function addPlayTime(storyPackageId: string, seconds: number): number {
   stats.totalPlayTime += seconds;
   updateStats(storyPackageId, stats);
   return stats.totalPlayTime;
+}
+
+export function initializeFactionStats(
+  storyPackageId: string,
+  factionId: string,
+  initialReputation: number
+): FactionStats {
+  const stats = getStats(storyPackageId);
+  if (!stats.factionStats) {
+    stats.factionStats = {};
+  }
+  if (!stats.factionStats[factionId]) {
+    stats.factionStats[factionId] = {
+      maxReputation: initialReputation,
+      minReputation: initialReputation,
+      totalChanges: 0,
+    };
+    updateStats(storyPackageId, stats);
+  }
+  return stats.factionStats[factionId];
+}
+
+export function updateFactionReputationStats(
+  storyPackageId: string,
+  factionId: string,
+  currentReputation: number,
+  changeAmount: number
+): FactionStats | null {
+  const stats = getStats(storyPackageId);
+  if (!stats.factionStats) {
+    stats.factionStats = {};
+  }
+  if (!stats.factionStats[factionId]) {
+    stats.factionStats[factionId] = {
+      maxReputation: currentReputation,
+      minReputation: currentReputation,
+      totalChanges: 0,
+    };
+  }
+  const factionStat = stats.factionStats[factionId];
+  factionStat.maxReputation = Math.max(factionStat.maxReputation, currentReputation);
+  factionStat.minReputation = Math.min(factionStat.minReputation, currentReputation);
+  factionStat.totalChanges += Math.abs(changeAmount);
+
+  stats.totalReputationChanges = (stats.totalReputationChanges ?? 0) + Math.abs(changeAmount);
+
+  updateStats(storyPackageId, stats);
+  return factionStat;
+}
+
+export function getFactionStats(
+  storyPackageId: string,
+  factionId: string
+): FactionStats | null {
+  const stats = getStats(storyPackageId);
+  return stats.factionStats?.[factionId] ?? null;
+}
+
+export function getAllFactionStats(storyPackageId: string): Record<string, FactionStats> {
+  const stats = getStats(storyPackageId);
+  return stats.factionStats ?? {};
 }

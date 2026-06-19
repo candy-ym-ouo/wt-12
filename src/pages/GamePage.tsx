@@ -8,7 +8,7 @@ import { TextInput } from '../components/TextInput';
 import { GlitchText } from '../components/GlitchText';
 import { useGameStore } from '../store/gameStore';
 import { useAudio } from '../hooks/useAudio';
-import type { StoryNode, Choice, Ending } from '../data/types';
+import type { StoryNode, Choice, Ending, FactionReputationChange } from '../data/types';
 import { ArrowLeft, Save } from 'lucide-react';
 
 export function GamePage() {
@@ -20,13 +20,14 @@ export function GamePage() {
     goToNode,
     setFlag,
     recordEnding,
-    currentNodeId: _cn,
+    changeReputation,
   } = useGameStore();
 
   const [currentNode, setCurrentNode] = useState<StoryNode | null>(null);
   const [isTextComplete, setIsTextComplete] = useState(false);
   const [endingShown, setEndingShown] = useState<Ending | null>(null);
   const [saveNotice, setSaveNotice] = useState(false);
+  const [reputationNotice, setReputationNotice] = useState<FactionReputationChange[] | null>(null);
 
   useEffect(() => {
     if (!storyPackage) {
@@ -67,9 +68,16 @@ export function GamePage() {
       if (choice.setFlag) {
         setFlag(choice.setFlag);
       }
+      if (choice.reputationChanges && choice.reputationChanges.length > 0) {
+        const applied = changeReputation(choice.reputationChanges);
+        if (applied.length > 0) {
+          setReputationNotice(applied);
+          setTimeout(() => setReputationNotice(null), 2500);
+        }
+      }
       goToNode(choice.nextId, choice.id);
     },
-    [play, setFlag, goToNode]
+    [play, setFlag, goToNode, changeReputation]
   );
 
   const handleInputSubmit = useCallback(
@@ -161,6 +169,26 @@ export function GamePage() {
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-glitch-bg border border-glitch-green px-4 py-2 text-glitch-green font-mono text-sm text-shadow-glow-green animate-glitch-horizontal">
           <Save className="w-4 h-4 inline mr-2" />
           游戏已保存
+        </div>
+      )}
+
+      {reputationNotice && reputationNotice.length > 0 && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-glitch-bg border px-4 py-2 font-mono text-sm animate-glitch-horizontal flex flex-col gap-1 min-w-[200px]"
+          style={{
+            borderColor: reputationNotice.some((c) => c.change > 0) ? '#00ff66' : '#ff0055',
+          }}
+        >
+          {reputationNotice.map((change, idx) => {
+            const faction = storyPackage?.factions?.find((f) => f.id === change.factionId);
+            const name = faction?.name ?? change.factionId;
+            const color = change.change > 0 ? '#00ff66' : '#ff0055';
+            const sign = change.change > 0 ? '+' : '';
+            return (
+              <div key={idx} style={{ color, textShadow: `0 0 8px ${color}` }}>
+                {name} {sign}{change.change}
+              </div>
+            );
+          })}
         </div>
       )}
 

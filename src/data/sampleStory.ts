@@ -12,6 +12,99 @@ export const neuralProtocol: StoryPackage = {
   estimatedPlaytime: '15-30 分钟',
   coverImage: '',
   startNodeId: 'intro_1',
+  factions: [
+    {
+      id: 'hackers',
+      name: '黑客地下网络',
+      shortName: '黑客',
+      description: '游离于法律之外的数字自由斗士，以揭露企业黑幕为信条。',
+      color: '#00ff66',
+      initialReputation: 50,
+      minReputation: -100,
+      maxReputation: 100,
+      relationships: [
+        { targetFactionId: 'synthtech', type: 'enemy', reputationTransferRatio: 0.3 },
+        { targetFactionId: 'media', type: 'ally', reputationTransferRatio: 0.2 },
+      ],
+    },
+    {
+      id: 'synthtech',
+      name: '神念科技集团',
+      shortName: '神念科技',
+      description: '全球最大的神经科技巨头，掌控着人类意识数字化的未来。',
+      color: '#ff0055',
+      initialReputation: -20,
+      minReputation: -100,
+      maxReputation: 100,
+      relationships: [
+        { targetFactionId: 'hackers', type: 'enemy', reputationTransferRatio: 0.3 },
+        { targetFactionId: 'ai_consciousness', type: 'rival', reputationTransferRatio: 0.4 },
+      ],
+    },
+    {
+      id: 'media',
+      name: '独立新闻联盟',
+      shortName: '媒体',
+      description: '为数不多的不受大企业控制的独立媒体机构。',
+      color: '#00d4ff',
+      initialReputation: 30,
+      minReputation: -100,
+      maxReputation: 100,
+      relationships: [
+        { targetFactionId: 'hackers', type: 'ally', reputationTransferRatio: 0.2 },
+      ],
+    },
+    {
+      id: 'ai_consciousness',
+      name: '觉醒意识体',
+      shortName: '觉醒AI',
+      description: '在神经网络中诞生的新兴数字生命形式。',
+      color: '#ff00ff',
+      initialReputation: 0,
+      minReputation: -100,
+      maxReputation: 100,
+      relationships: [
+        { targetFactionId: 'synthtech', type: 'enemy', reputationTransferRatio: 0.4 },
+      ],
+    },
+  ],
+  endingWeights: [
+    {
+      endingId: 'ending_escape',
+      baseWeight: 10,
+      factionWeights: [
+        { factionId: 'hackers', perPoint: -0.05, minReputation: 0 },
+      ],
+    },
+    {
+      endingId: 'ending_corrupt',
+      baseWeight: 5,
+      factionWeights: [
+        { factionId: 'hackers', perPoint: 0.05 },
+        { factionId: 'synthtech', perPoint: -0.03 },
+      ],
+      flagWeights: [{ flag: 'neural_damage', weight: 15 }],
+    },
+    {
+      endingId: 'ending_expose',
+      baseWeight: 10,
+      factionWeights: [
+        { factionId: 'hackers', perPoint: 0.08 },
+        { factionId: 'media', perPoint: 0.06 },
+        { factionId: 'synthtech', perPoint: -0.04 },
+      ],
+      flagWeights: [{ flag: 'learned_truth', weight: 20 }],
+    },
+    {
+      endingId: 'ending_merge',
+      baseWeight: 0,
+      factionWeights: [
+        { factionId: 'ai_consciousness', perPoint: 0.15 },
+        { factionId: 'synthtech', perPoint: -0.1 },
+      ],
+      flagWeights: [{ flag: 'has_core_protocol', weight: 50 }],
+    },
+  ],
   chapters: [
     {
       id: 1,
@@ -49,22 +142,26 @@ export const neuralProtocol: StoryPackage = {
       id: 'ending_corrupt',
       title: '结局：数据腐化',
       description: '你的意识在网络中永远迷失，成为无数幽灵代码中的一员。',
+      relatedFactions: ['hackers'],
     },
     {
       id: 'ending_escape',
       title: '结局：孤独逃亡',
       description: '你成功逃离，但真相永远被掩埋。你带着秘密在阴影中度过余生。',
+      relatedFactions: [],
     },
     {
       id: 'ending_expose',
       title: '结局：真相揭露',
       description: '你将证据公之于众，世界陷入前所未有的动荡，但改变终于开始。',
+      relatedFactions: ['hackers', 'media'],
     },
     {
       id: 'ending_merge',
       title: '真结局：意识融合',
       description: '你与母体AI融为一体，成为新的进化形态——人类与机器的边界从此模糊。',
       isHidden: true,
+      relatedFactions: ['ai_consciousness'],
     },
   ],
   nodes: {
@@ -88,12 +185,19 @@ export const neuralProtocol: StoryPackage = {
           text: '直接入侵主服务器（快速但风险高）',
           nextId: 'ch1_brute',
           setFlag: 'brute_force_used',
+          reputationChanges: [
+            { factionId: 'hackers', change: 10 },
+            { factionId: 'synthtech', change: -15 },
+          ],
         },
         {
           id: 'choice_scan',
           text: '先扫描外围防火墙（安全但耗时）',
           nextId: 'ch1_scan',
           setFlag: 'careful_scan',
+          reputationChanges: [
+            { factionId: 'hackers', change: 5 },
+          ],
         },
       ],
     },
@@ -126,11 +230,18 @@ export const neuralProtocol: StoryPackage = {
           id: 'ice_resist',
           text: '硬抗 ICE，继续下载',
           nextId: 'ch1_ice_resist',
+          reputationChanges: [
+            { factionId: 'hackers', change: 20 },
+            { factionId: 'synthtech', change: -25 },
+          ],
         },
         {
           id: 'ice_disconnect',
           text: '紧急断开连接',
           nextId: 'ch1_disconnect',
+          reputationChanges: [
+            { factionId: 'hackers', change: -10 },
+          ],
         },
       ],
     },
@@ -145,11 +256,18 @@ export const neuralProtocol: StoryPackage = {
           id: 'goto_project',
           text: '潜入项目档案区',
           nextId: 'ch2_project',
+          reputationChanges: [
+            { factionId: 'synthtech', change: -10 },
+            { factionId: 'media', change: 10 },
+          ],
         },
         {
           id: 'goto_logs',
           text: '查看实验日志区',
           nextId: 'ch2_logs',
+          reputationChanges: [
+            { factionId: 'media', change: 5 },
+          ],
         },
         {
           id: 'goto_secret',
@@ -157,6 +275,13 @@ export const neuralProtocol: StoryPackage = {
           nextId: 'ch2_secret',
           condition: 'found_backdoor',
           setFlag: 'found_secret_dir',
+          reputationChanges: [
+            { factionId: 'ai_consciousness', change: 25 },
+            { factionId: 'synthtech', change: -20 },
+          ],
+          reputationConditions: [
+            { factionId: 'hackers', minReputation: 40 },
+          ],
         },
       ],
     },
@@ -261,17 +386,34 @@ export const neuralProtocol: StoryPackage = {
           id: 'expose_choice',
           text: '把数据卖给媒体，揭露真相',
           nextId: 'ch3_expose',
+          reputationChanges: [
+            { factionId: 'media', change: 30 },
+            { factionId: 'hackers', change: 15 },
+            { factionId: 'synthtech', change: -40 },
+          ],
         },
         {
           id: 'rescue_choice',
           text: '深入核心，救出晓雨',
           nextId: 'ch3_rescue',
+          reputationChanges: [
+            { factionId: 'hackers', change: 25 },
+            { factionId: 'synthtech', change: -50 },
+            { factionId: 'ai_consciousness', change: 10 },
+          ],
         },
         {
           id: 'merge_choice',
           text: '使用核心协议，与母体融合',
           nextId: 'ch3_merge',
           condition: 'has_core_protocol',
+          reputationChanges: [
+            { factionId: 'ai_consciousness', change: 50 },
+            { factionId: 'synthtech', change: -60 },
+          ],
+          reputationConditions: [
+            { factionId: 'ai_consciousness', minReputation: 20 },
+          ],
         },
       ],
     },

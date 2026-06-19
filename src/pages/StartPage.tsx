@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Terminal, Play, BookOpen, Trophy, Layers, Archive } from 'lucide-react';
+import { Terminal, Trophy, Layers, Archive, Shield } from 'lucide-react';
 import { GlitchText } from '../components/GlitchText';
 import { TerminalWindow } from '../components/TerminalWindow';
 import { useGameStore } from '../store/gameStore';
@@ -17,6 +17,8 @@ export function StartPage() {
     totalEndings: 0,
     unlockedEndings: 0,
     totalPlays: 0,
+    totalFactions: 0,
+    totalReputationChanges: 0,
   });
 
   useEffect(() => {
@@ -38,11 +40,21 @@ export function StartPage() {
       (sum, s) => sum + s.totalPlays,
       0
     );
+    const totalFactions = storyPackageSummaries.reduce(
+      (sum, s) => sum + (s.totalFactions ?? 0),
+      0
+    );
+    const totalReputationChanges = Object.values(allStats).reduce(
+      (sum, s) => sum + (s.totalReputationChanges ?? 0),
+      0
+    );
     setTotalStats({
       totalStories: storyPackageSummaries.length,
       totalEndings,
       unlockedEndings,
       totalPlays,
+      totalFactions,
+      totalReputationChanges,
     });
     const timer = setTimeout(() => setShowTitle(true), 200);
     return () => clearTimeout(timer);
@@ -92,7 +104,7 @@ export function StartPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-4 w-full max-w-md">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full max-w-lg">
             <div className="text-center p-3 border border-glitch-green/20">
               <div className="text-glitch-yellow text-2xl font-display text-shadow-glow-yellow">
                 {totalStats.unlockedEndings}
@@ -109,8 +121,16 @@ export function StartPage() {
                 结局总数
               </div>
             </div>
-            <div className="text-center p-3 border border-glitch-green/20">
+            <div className="text-center p-3 border border-glitch-magenta/20">
               <div className="text-glitch-magenta text-2xl font-display text-shadow-glow-red">
+                {totalStats.totalFactions}
+              </div>
+              <div className="text-glitch-green/50 text-xs font-mono mt-1 flex items-center justify-center gap-1">
+                <Shield className="w-3 h-3" /> 势力总数
+              </div>
+            </div>
+            <div className="text-center p-3 border border-glitch-green/20">
+              <div className="text-glitch-green text-2xl font-display text-shadow-glow-green">
                 {totalStats.totalPlays}
               </div>
               <div className="text-glitch-green/50 text-xs font-mono mt-1">
@@ -118,6 +138,12 @@ export function StartPage() {
               </div>
             </div>
           </div>
+          {totalStats.totalReputationChanges > 0 && (
+            <div className="text-center text-xs font-mono text-glitch-magenta/70">
+              <Layers className="w-3 h-3 inline mr-1" />
+              已记录 {totalStats.totalReputationChanges} 次声望变动
+            </div>
+          )}
 
           <div className="text-glitch-green/60 text-sm font-mono max-w-md text-center leading-relaxed">
             欢迎来到互动叙事档案中心。这里收录了多个风格迥异的互动故事，
