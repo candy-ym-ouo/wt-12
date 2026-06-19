@@ -209,6 +209,7 @@ export interface SaveData {
   acceptedTasks: string[];
   completedTasks: string[];
   failedTasks: string[];
+  taskTimestamps: Record<string, { acceptedAt?: number; completedAt?: number; failedAt?: number }>;
   triggeredCommunications: string[];
 }
 

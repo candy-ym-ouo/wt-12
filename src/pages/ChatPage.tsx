@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useGameStore } from '../store/gameStore';
 import { MessageBubble } from '../components/MessageBubble';
@@ -7,66 +7,83 @@ import { TerminalWindow } from '../components/TerminalWindow';
 import { GlitchText } from '../components/GlitchText';
 import { ArrowLeft, Phone, MoreVertical, User } from 'lucide-react';
 import { TextInput } from '../components/TextInput';
-import type { Message } from '../data/types';
+import type { Message, Conversation, Contact } from '../data/types';
 
 export function ChatPage() {
   const navigate = useNavigate();
   const { conversationId, contactId } = useParams<{ conversationId: string; contactId: string }>();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const {
-    storyPackage,
-    getConversationById,
-    getConversationByContactId,
-    getContactById,
-    sendMessage,
-    setCurrentConversation,
-    currentConversationId,
-  } = useGameStore();
+  const storyPackage = useGameStore((state) => state.storyPackage);
+  const getConversationById = useGameStore((state) => state.getConversationById);
+  const getConversationByContactId = useGameStore((state) => state.getConversationByContactId);
+  const getOrCreateConversation = useGameStore((state) => state.getOrCreateConversation);
+  const getContactById = useGameStore((state) => state.getContactById);
+  const sendMessage = useGameStore((state) => state.sendMessage);
+  const setCurrentConversation = useGameStore((state) => state.setCurrentConversation);
+  const markConversationAsRead = useGameStore((state) => state.markConversationAsRead);
 
-  const [conversation, setConversation] = useState(getConversationById(conversationId ?? '') ?? null);
-  const [contact, setContact] = useState<ReturnType<typeof getContactById>>(null);
+  const conversation = useMemo<Conversation | null>(() => {
+    if (!storyPackage) return null;
+    if (conversationId) {
+      return getConversationById(conversationId);
+    }
+    if (contactId) {
+      return getConversationByContactId(contactId);
+    }
+    return null;
+  }, [storyPackage, conversationId, contactId, getConversationById, getConversationByContactId]);
+
+  const contact = useMemo<Contact | null>(() => {
+    if (!storyPackage) return null;
+    if (conversation) {
+      return getContactById(conversation.contactId);
+    }
+    if (contactId) {
+      return getContactById(contactId);
+    }
+    return null;
+  }, [storyPackage, conversation, contactId, getContactById]);
 
   useEffect(() => {
+    if (!storyPackage) {
+      navigate('/');
+      return;
+    }
+
     if (conversationId) {
-      const conv = getConversationById(conversationId);
+      setCurrentConversation(conversationId);
+      markConversationAsRead(conversationId);
+    } else if (contactId && !conversation) {
+      const conv = getOrCreateConversation(contactId);
       if (conv) {
-        setConversation(conv);
-        setContact(getContactById(conv.contactId));
-        setCurrentConversation(conversationId);
-      } else if (contactId) {
-        setContact(getContactById(contactId));
-      }
-    } else if (contactId) {
-      const existingConv = getConversationByContactId(contactId);
-      if (existingConv) {
-        navigate(`/chat/${existingConv.id}`);
+        navigate(`/chat/${conv.id}`, { replace: true });
         return;
       }
-      setContact(getContactById(contactId));
     }
 
     return () => {
       setCurrentConversation(null);
     };
-  }, [conversationId, contactId, getConversationById, getConversationByContactId, getContactById, setCurrentConversation, navigate]);
-
-  useEffect(() => {
-    if (currentConversationId) {
-      const conv = getConversationById(currentConversationId);
-      if (conv) {
-        setConversation(conv);
-      }
-    }
-  }, [currentConversationId, getConversationById]);
+  }, [storyPackage, conversationId, contactId, conversation, setCurrentConversation, markConversationAsRead, getOrCreateConversation, navigate]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [conversation?.messages]);
+  }, [conversation?.messages?.length]);
 
   const handleSendMessage = (value: string) => {
-    if (!conversation) return;
-    sendMessage(conversation.id, value.trim());
+    const trimmed = value.trim();
+    if (!trimmed) return;
+
+    if (conversation) {
+      sendMessage(conversation.id, trimmed);
+    } else if (contactId) {
+      const conv = getOrCreateConversation(contactId);
+      if (conv) {
+        sendMessage(conv.id, trimmed);
+        navigate(`/chat/${conv.id}`, { replace: true });
+      }
+    }
   };
 
   const getMessagesToShow = (): Message[] => {
@@ -80,7 +97,6 @@ export function ChatPage() {
   };
 
   if (!storyPackage) {
-    navigate('/');
     return null;
   }
 

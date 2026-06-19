@@ -53,6 +53,7 @@ interface GameStore {
   acceptedTasks: Set<string>;
   completedTasks: Set<string>;
   failedTasks: Set<string>;
+  taskTimestamps: Record<string, { acceptedAt?: number; completedAt?: number; failedAt?: number }>;
   triggeredCommunications: Set<string>;
   activeCall: IncomingCall | null;
   pendingCalls: IncomingCall[];
@@ -98,12 +99,14 @@ interface GameStore {
   getConversations: () => Conversation[];
   getConversationById: (conversationId: string) => Conversation | null;
   getConversationByContactId: (contactId: string) => Conversation | null;
+  getOrCreateConversation: (contactId: string) => Conversation | null;
   sendMessage: (conversationId: string, content: string) => Message | null;
   markMessageAsRead: (messageId: string) => void;
   markConversationAsRead: (conversationId: string) => void;
   setCurrentConversation: (conversationId: string | null) => void;
   getUnreadMessageCount: () => number;
   triggerIncomingCall: (callId: string) => IncomingCall | null;
+  initiateCall: (contactId: string) => IncomingCall | null;
   answerCall: (callId: string) => boolean;
   rejectCall: (callId: string) => boolean;
   endCall: () => void;
@@ -145,6 +148,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   acceptedTasks: new Set(),
   completedTasks: new Set(),
   failedTasks: new Set(),
+  taskTimestamps: {},
   triggeredCommunications: new Set(),
   activeCall: null,
   pendingCalls: [],
@@ -322,6 +326,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       acceptedTasks,
       completedTasks,
       failedTasks,
+      taskTimestamps,
       triggeredCommunications,
     } = get();
     if (!storyPackage) return;
@@ -345,6 +350,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       acceptedTasks: Array.from(acceptedTasks),
       completedTasks: Array.from(completedTasks),
       failedTasks: Array.from(failedTasks),
+      taskTimestamps,
       triggeredCommunications: Array.from(triggeredCommunications),
     };
     saveGame(data);
@@ -393,6 +399,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       acceptedTasks: new Set(data.acceptedTasks ?? []),
       completedTasks: new Set(data.completedTasks ?? []),
       failedTasks: new Set(data.failedTasks ?? []),
+      taskTimestamps: data.taskTimestamps ?? {},
       triggeredCommunications: new Set(data.triggeredCommunications ?? []),
       activeCall: null,
       pendingCalls: [],
@@ -827,6 +834,38 @@ export const useGameStore = create<GameStore>((set, get) => ({
     return get().storyPackage?.communication?.conversations?.find((c) => c.contactId === contactId) ?? null;
   },
 
+  getOrCreateConversation: (contactId) => {
+    const { storyPackage, getContactById, isContactUnlocked } = get();
+    if (!storyPackage?.communication?.conversations) return null;
+    if (!isContactUnlocked(contactId)) return null;
+    const contact = getContactById(contactId);
+    if (!contact) return null;
+
+    const existing = storyPackage.communication.conversations.find((c) => c.contactId === contactId);
+    if (existing) return existing;
+
+    const newConversation: Conversation = {
+      id: `conv_${contactId}_${Date.now()}`,
+      contactId,
+      lastMessageAt: Date.now(),
+      unreadCount: 0,
+      messages: [],
+    };
+
+    const updatedConversations = [...storyPackage.communication.conversations, newConversation];
+    set({
+      storyPackage: {
+        ...storyPackage,
+        communication: {
+          ...storyPackage.communication,
+          conversations: updatedConversations,
+        },
+      },
+    });
+
+    return newConversation;
+  },
+
   sendMessage: (conversationId, content) => {
     const { storyPackage, currentConversationId } = get();
     if (!storyPackage?.communication?.conversations) return null;
@@ -943,6 +982,28 @@ export const useGameStore = create<GameStore>((set, get) => ({
     return newCall;
   },
 
+  initiateCall: (contactId) => {
+    const { activeCall, getContactById } = get();
+    if (activeCall) return null;
+    const contact = getContactById(contactId);
+    if (!contact) return null;
+    const newCall: IncomingCall = {
+      id: `call_outgoing_${contactId}_${Date.now()}`,
+      callerId: contactId,
+      callType: 'voice',
+      status: 'ringing',
+      startTime: Date.now(),
+      autoAnswer: false,
+      canReject: true,
+      glitchLevel: 0,
+    };
+    set((state) => ({
+      pendingCalls: [...state.pendingCalls, newCall],
+      activeCall: newCall,
+    }));
+    return newCall;
+  },
+
   answerCall: (callId) => {
     const { activeCall, pendingCalls } = get();
     if (!activeCall || activeCall.id !== callId) return false;
@@ -1000,17 +1061,54 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   getTasks: () => {
-    const { storyPackage, acceptedTasks, completedTasks, failedTasks, triggeredCommunications } = get();
+    const { storyPackage, acceptedTasks, completedTasks, failedTasks, taskTimestamps, triggeredCommunications } = get();
     if (!storyPackage?.communication?.branchTasks) return [];
-    return storyPackage.communication.branchTasks.filter((task) => {
-      if (task.isHidden && !triggeredCommunications.has(task.id)) return false;
-      if (task.unlockCondition && !get().hasFlag(task.unlockCondition)) return false;
-      return acceptedTasks.has(task.id) || completedTasks.has(task.id) || failedTasks.has(task.id) || task.status === 'pending';
-    });
+    return storyPackage.communication.branchTasks
+      .filter((task) => {
+        if (task.isHidden && !triggeredCommunications.has(task.id)) return false;
+        if (task.unlockCondition && !get().hasFlag(task.unlockCondition)) return false;
+        return acceptedTasks.has(task.id) || completedTasks.has(task.id) || failedTasks.has(task.id) || task.status === 'pending';
+      })
+      .map((task) => {
+        const timestamps = taskTimestamps[task.id] || {};
+        let status: typeof task.status = task.status;
+        if (completedTasks.has(task.id)) {
+          status = 'completed';
+        } else if (failedTasks.has(task.id)) {
+          status = 'failed';
+        } else if (acceptedTasks.has(task.id)) {
+          status = 'accepted';
+        }
+        return {
+          ...task,
+          status,
+          acceptedAt: timestamps.acceptedAt,
+          completedAt: timestamps.completedAt,
+          failedAt: timestamps.failedAt,
+        };
+      });
   },
 
   getTaskById: (taskId) => {
-    return get().storyPackage?.communication?.branchTasks?.find((t) => t.id === taskId) ?? null;
+    const task = get().storyPackage?.communication?.branchTasks?.find((t) => t.id === taskId);
+    if (!task) return null;
+    const { acceptedTasks, completedTasks, failedTasks, taskTimestamps } = get();
+    const timestamps = taskTimestamps[taskId] || {};
+    let status: typeof task.status = task.status;
+    if (completedTasks.has(taskId)) {
+      status = 'completed';
+    } else if (failedTasks.has(taskId)) {
+      status = 'failed';
+    } else if (acceptedTasks.has(taskId)) {
+      status = 'accepted';
+    }
+    return {
+      ...task,
+      status,
+      acceptedAt: timestamps.acceptedAt,
+      completedAt: timestamps.completedAt,
+      failedAt: timestamps.failedAt,
+    };
   },
 
   checkTaskRequirements: (task) => {
@@ -1037,16 +1135,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   acceptTask: (taskId) => {
-    const { acceptedTasks, storyPackage, pendingTasks } = get();
+    const { acceptedTasks, storyPackage, pendingTasks, taskTimestamps } = get();
     if (acceptedTasks.has(taskId)) return false;
     const task = storyPackage?.communication?.branchTasks?.find((t) => t.id === taskId);
     if (!task) return false;
     if (!get().checkTaskRequirements(task)) return false;
     const newAccepted = new Set(acceptedTasks);
     newAccepted.add(taskId);
+    const newTimestamps = {
+      ...taskTimestamps,
+      [taskId]: { ...taskTimestamps[taskId], acceptedAt: Date.now() },
+    };
     set({
       acceptedTasks: newAccepted,
       pendingTasks: pendingTasks.filter((id) => id !== taskId),
+      taskTimestamps: newTimestamps,
     });
     if (task.nextNodeIdOnAccept) {
       get().goToNode(task.nextNodeIdOnAccept);
@@ -1055,7 +1158,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   completeTask: (taskId) => {
-    const { completedTasks, acceptedTasks, storyPackage } = get();
+    const { completedTasks, acceptedTasks, storyPackage, taskTimestamps } = get();
     if (completedTasks.has(taskId)) return false;
     const task = storyPackage?.communication?.branchTasks?.find((t) => t.id === taskId);
     if (!task) return false;
@@ -1063,9 +1166,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     newCompleted.add(taskId);
     const newAccepted = new Set(acceptedTasks);
     newAccepted.delete(taskId);
+    const newTimestamps = {
+      ...taskTimestamps,
+      [taskId]: { ...taskTimestamps[taskId], completedAt: Date.now() },
+    };
     set({
       completedTasks: newCompleted,
       acceptedTasks: newAccepted,
+      taskTimestamps: newTimestamps,
     });
     if (task.rewardClueIds) {
       for (const clueId of task.rewardClueIds) {
@@ -1087,7 +1195,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   failTask: (taskId) => {
-    const { failedTasks, acceptedTasks, storyPackage } = get();
+    const { failedTasks, acceptedTasks, storyPackage, taskTimestamps } = get();
     if (failedTasks.has(taskId)) return false;
     const task = storyPackage?.communication?.branchTasks?.find((t) => t.id === taskId);
     if (!task) return false;
@@ -1095,9 +1203,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     newFailed.add(taskId);
     const newAccepted = new Set(acceptedTasks);
     newAccepted.delete(taskId);
+    const newTimestamps = {
+      ...taskTimestamps,
+      [taskId]: { ...taskTimestamps[taskId], failedAt: Date.now() },
+    };
     set({
       failedTasks: newFailed,
       acceptedTasks: newAccepted,
+      taskTimestamps: newTimestamps,
     });
     if (task.failureNodeId) {
       get().goToNode(task.failureNodeId);

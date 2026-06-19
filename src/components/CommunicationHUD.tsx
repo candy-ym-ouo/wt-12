@@ -38,7 +38,7 @@ export function CommunicationHUD({ showLabels = true, vertical = false }: Commun
       label: '消息',
       icon: MessageCircle,
       count: unreadCount,
-      path: '/messages',
+      path: '/contacts',
       color: 'text-glitch-blue',
       borderColor: 'border-glitch-blue',
       bgHover: 'hover:bg-glitch-blue/20',

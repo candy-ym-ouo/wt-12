@@ -23,17 +23,16 @@ export function CallsPage() {
     getPendingCalls,
     answeredCalls,
     rejectedCalls,
-    triggerIncomingCall,
+    initiateCall,
   } = useGameStore();
 
   const [filter, setFilter] = useState<'all' | 'incoming' | 'answered' | 'missed'>('all');
 
   useEffect(() => {
     if (callContactId && !activeCall) {
-      const callId = `call_manual_${callContactId}_${Date.now()}`;
-      triggerIncomingCall(callId);
+      initiateCall(callContactId);
     }
-  }, [callContactId, activeCall, triggerIncomingCall]);
+  }, [callContactId, activeCall, initiateCall]);
 
   const handleAnswer = () => {
     if (activeCall) {
