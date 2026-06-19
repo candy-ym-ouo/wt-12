@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Volume2, VolumeX, Save, Home, Book, ChevronDown, ChevronUp, Shield } from 'lucide-react';
+import { Volume2, VolumeX, Save, Home, Book, ChevronDown, ChevronUp, Shield, Puzzle } from 'lucide-react';
 import { useAudio } from '../hooks/useAudio';
 import { useGameStore } from '../store/gameStore';
 import { useNavigate } from 'react-router-dom';
 import { ChapterMetadataPanel } from './ChapterMetadata';
 import { FactionReputationPanel } from './FactionReputationPanel';
+import { EvidencePanel } from './EvidencePanel';
 
 interface HUDProps {
   onSave?: () => void;
@@ -16,7 +17,11 @@ export function HUD({ onSave }: HUDProps) {
   const navigate = useNavigate();
   const [showChapterPanel, setShowChapterPanel] = useState(false);
   const [showReputationPanel, setShowReputationPanel] = useState(false);
+  const [showEvidencePanel, setShowEvidencePanel] = useState(false);
   const hasFactions = storyPackage?.factions && storyPackage.factions.length > 0;
+  const hasEvidence = (storyPackage?.evidenceClues?.length ?? 0) > 0 ||
+    (storyPackage?.encodedLogs?.length ?? 0) > 0 ||
+    (storyPackage?.hiddenNodeTriggers?.length ?? 0) > 0;
 
   const handleSave = () => {
     saveToStorage();
@@ -44,7 +49,7 @@ export function HUD({ onSave }: HUDProps) {
             className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
             onClick={() => {
               setShowChapterPanel(!showChapterPanel);
-              if (!showChapterPanel) setShowReputationPanel(false);
+              if (!showChapterPanel) { setShowReputationPanel(false); setShowEvidencePanel(false); }
             }}
           >
             <Book className="w-4 h-4 text-glitch-blue" />
@@ -67,7 +72,7 @@ export function HUD({ onSave }: HUDProps) {
             <button
               onClick={() => {
                 setShowReputationPanel(!showReputationPanel);
-                if (!showReputationPanel) setShowChapterPanel(false);
+                if (!showReputationPanel) { setShowChapterPanel(false); setShowEvidencePanel(false); }
               }}
               className="flex items-center gap-2 p-1.5 hover:bg-glitch-magenta/20 transition-colors group"
               title="势力声望"
@@ -80,6 +85,27 @@ export function HUD({ onSave }: HUDProps) {
                 <ChevronUp className="w-3.5 h-3.5 text-glitch-magenta/60" />
               ) : (
                 <ChevronDown className="w-3.5 h-3.5 text-glitch-magenta/60" />
+              )}
+            </button>
+          )}
+
+          {hasEvidence && (
+            <button
+              onClick={() => {
+                setShowEvidencePanel(!showEvidencePanel);
+                if (!showEvidencePanel) { setShowChapterPanel(false); setShowReputationPanel(false); }
+              }}
+              className="flex items-center gap-2 p-1.5 hover:bg-glitch-yellow/20 transition-colors group"
+              title="证据拼图"
+            >
+              <Puzzle className="w-4 h-4 text-glitch-yellow group-hover:text-shadow-glow-yellow" />
+              <span className="text-glitch-yellow text-shadow-glow-yellow font-mono text-xs hidden sm:inline">
+                证据
+              </span>
+              {showEvidencePanel ? (
+                <ChevronUp className="w-3.5 h-3.5 text-glitch-yellow/60" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 text-glitch-yellow/60" />
               )}
             </button>
           )}
@@ -128,6 +154,12 @@ export function HUD({ onSave }: HUDProps) {
           <div className="border border-glitch-magenta/30 bg-glitch-bg/80 backdrop-blur p-4">
             <FactionReputationPanel />
           </div>
+        </div>
+      )}
+
+      {showEvidencePanel && storyPackage && hasEvidence && (
+        <div className="w-full max-w-4xl mx-auto px-4 py-3">
+          <EvidencePanel onClose={() => setShowEvidencePanel(false)} />
         </div>
       )}
     </div>

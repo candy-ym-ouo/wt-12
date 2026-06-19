@@ -25,6 +25,18 @@ export function loadGame(storyPackageId: string): SaveData | null {
     if (!parsed.reputation) {
       parsed.reputation = {};
     }
+    if (!parsed.collectedClues) {
+      parsed.collectedClues = [];
+    }
+    if (!parsed.decodedLogs) {
+      parsed.decodedLogs = [];
+    }
+    if (!parsed.verifiedKeywords) {
+      parsed.verifiedKeywords = [];
+    }
+    if (!parsed.triggeredHiddenNodes) {
+      parsed.triggeredHiddenNodes = [];
+    }
     return parsed;
   } catch (e) {
     console.error('Failed to load game:', e);

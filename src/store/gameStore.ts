@@ -6,6 +6,9 @@ import type {
   FactionReputation,
   FactionReputationChange,
   ReputationCondition,
+  EncodedLog,
+  EvidenceClue,
+  HiddenNodeTrigger,
 } from '../data/types';
 import {
   saveGame,
@@ -32,6 +35,11 @@ interface GameStore {
   isLoaded: boolean;
   lastChapter: number;
   reputation: FactionReputation;
+  collectedClues: Set<string>;
+  decodedLogs: Set<string>;
+  verifiedKeywords: Set<string>;
+  triggeredHiddenNodes: Set<string>;
+  pendingHiddenTriggers: string[];
 
   setStoryPackage: (pkg: StoryPackage) => void;
   goToNode: (nodeId: string, choiceId?: string) => void;
@@ -50,6 +58,19 @@ interface GameStore {
   checkReputationConditions: (conditions: ReputationCondition[]) => boolean;
   calculateEndingWeights: () => Record<string, number>;
   getPredictedEnding: () => string | null;
+  collectClue: (clueId: string) => boolean;
+  hasClue: (clueId: string) => boolean;
+  collectCluesFromNode: (nodeId: string) => string[];
+  decodeLog: (logId: string) => EncodedLog | null;
+  isLogDecoded: (logId: string) => boolean;
+  getAvailableLogs: () => EncodedLog[];
+  verifyKeyword: (keyword: string) => boolean;
+  isKeywordVerified: (keyword: string) => boolean;
+  checkHiddenNodeTriggers: () => string[];
+  dismissPendingTrigger: (triggerId: string) => void;
+  getClueById: (clueId: string) => EvidenceClue | null;
+  getLogById: (logId: string) => EncodedLog | null;
+  getTriggerById: (triggerId: string) => HiddenNodeTrigger | null;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -64,6 +85,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
   totalEndings: 0,
   isLoaded: false,
   reputation: {},
+  collectedClues: new Set(),
+  decodedLogs: new Set(),
+  verifiedKeywords: new Set(),
+  triggeredHiddenNodes: new Set(),
+  pendingHiddenTriggers: [],
 
   setStoryPackage: (pkg) => {
     const stats = getStats(pkg.id);
@@ -117,6 +143,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (node.setFlag) {
       get().setFlag(node.setFlag);
     }
+
+    if (node.collectClues && node.collectClues.length > 0) {
+      get().collectCluesFromNode(nodeId);
+    }
+
+    if (node.unlockLogId) {
+      get().decodeLog(node.unlockLogId);
+    }
+
+    if (node.hiddenTriggers && node.hiddenTriggers.length > 0) {
+      get().checkHiddenNodeTriggers();
+    }
   },
 
   setFlag: (flag) => {
@@ -153,6 +191,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       totalPlays: stats.totalPlays,
       unlockedEndings: stats.endingsUnlocked,
       reputation: initialReputation,
+      collectedClues: new Set(),
+      decodedLogs: new Set(),
+      verifiedKeywords: new Set(),
+      triggeredHiddenNodes: new Set(),
+      pendingHiddenTriggers: [],
     });
   },
 
@@ -164,7 +207,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   saveToStorage: () => {
-    const { storyPackage, currentNodeId, chapter, flags, unlockedEndings, playHistory, reputation } = get();
+    const { storyPackage, currentNodeId, chapter, flags, unlockedEndings, playHistory, reputation, collectedClues, decodedLogs, verifiedKeywords, triggeredHiddenNodes } = get();
     if (!storyPackage) return;
     const data: SaveData = {
       storyPackageId: storyPackage.id,
@@ -175,6 +218,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       playHistory,
       savedAt: Date.now(),
       reputation,
+      collectedClues: Array.from(collectedClues),
+      decodedLogs: Array.from(decodedLogs),
+      verifiedKeywords: Array.from(verifiedKeywords),
+      triggeredHiddenNodes: Array.from(triggeredHiddenNodes),
     };
     saveGame(data);
   },
@@ -201,6 +248,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       unlockedEndings: data.unlockedEndings,
       playHistory: data.playHistory,
       reputation: loadedReputation,
+      collectedClues: new Set(data.collectedClues ?? []),
+      decodedLogs: new Set(data.decodedLogs ?? []),
+      verifiedKeywords: new Set(data.verifiedKeywords ?? []),
+      triggeredHiddenNodes: new Set(data.triggeredHiddenNodes ?? []),
+      pendingHiddenTriggers: [],
     });
     return true;
   },
@@ -231,6 +283,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       flags: new Set(),
       playHistory: [],
       reputation: initialReputation,
+      collectedClues: new Set(),
+      decodedLogs: new Set(),
+      verifiedKeywords: new Set(),
+      triggeredHiddenNodes: new Set(),
+      pendingHiddenTriggers: [],
     });
   },
 
@@ -247,6 +304,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       totalEndings: 0,
       isLoaded: false,
       reputation: {},
+      collectedClues: new Set(),
+      decodedLogs: new Set(),
+      verifiedKeywords: new Set(),
+      triggeredHiddenNodes: new Set(),
+      pendingHiddenTriggers: [],
     });
   },
 
@@ -385,5 +447,135 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     return predictedEnding;
+  },
+
+  collectClue: (clueId) => {
+    const { collectedClues } = get();
+    if (collectedClues.has(clueId)) return false;
+    const newClues = new Set(collectedClues);
+    newClues.add(clueId);
+    set({ collectedClues: newClues });
+    get().checkHiddenNodeTriggers();
+    return true;
+  },
+
+  hasClue: (clueId) => {
+    return get().collectedClues.has(clueId);
+  },
+
+  collectCluesFromNode: (nodeId) => {
+    const { storyPackage } = get();
+    if (!storyPackage) return [];
+    const node = storyPackage.nodes[nodeId];
+    if (!node?.collectClues) return [];
+    const newlyCollected: string[] = [];
+    for (const clueId of node.collectClues) {
+      if (get().collectClue(clueId)) {
+        newlyCollected.push(clueId);
+      }
+    }
+    return newlyCollected;
+  },
+
+  decodeLog: (logId) => {
+    const { storyPackage, decodedLogs, collectedClues, flags } = get();
+    if (!storyPackage?.encodedLogs) return null;
+    const log = storyPackage.encodedLogs.find((l) => l.id === logId);
+    if (!log) return null;
+    if (log.unlockCondition && !flags.has(log.unlockCondition)) return null;
+    if (!decodedLogs.has(logId)) {
+      const newDecoded = new Set(decodedLogs);
+      newDecoded.add(logId);
+      set({ decodedLogs: newDecoded });
+    }
+    if (log.clueIds) {
+      for (const clueId of log.clueIds) {
+        if (!collectedClues.has(clueId)) {
+          get().collectClue(clueId);
+        }
+      }
+    }
+    if (log.keyword) {
+      get().verifyKeyword(log.keyword);
+    }
+    get().checkHiddenNodeTriggers();
+    return log;
+  },
+
+  isLogDecoded: (logId) => {
+    return get().decodedLogs.has(logId);
+  },
+
+  getAvailableLogs: () => {
+    const { storyPackage, flags } = get();
+    if (!storyPackage?.encodedLogs) return [];
+    return storyPackage.encodedLogs.filter(
+      (log) => !log.unlockCondition || flags.has(log.unlockCondition)
+    );
+  },
+
+  verifyKeyword: (keyword) => {
+    const { storyPackage, verifiedKeywords } = get();
+    if (!storyPackage?.keywords) return false;
+    const matchedKeyword = storyPackage.keywords.find((kw) => {
+      if (kw.caseSensitive) return kw.keyword === keyword;
+      return kw.keyword.toLowerCase() === keyword.toLowerCase();
+    });
+    if (!matchedKeyword) return false;
+    if (!verifiedKeywords.has(matchedKeyword.keyword)) {
+      const newVerified = new Set(verifiedKeywords);
+      newVerified.add(matchedKeyword.keyword);
+      set({ verifiedKeywords: newVerified });
+      get().checkHiddenNodeTriggers();
+    }
+    return true;
+  },
+
+  isKeywordVerified: (keyword) => {
+    return get().verifiedKeywords.has(keyword);
+  },
+
+  checkHiddenNodeTriggers: () => {
+    const { storyPackage, collectedClues, verifiedKeywords, decodedLogs, triggeredHiddenNodes } = get();
+    if (!storyPackage?.hiddenNodeTriggers) return [];
+    const newlyTriggered: string[] = [];
+    for (const trigger of storyPackage.hiddenNodeTriggers) {
+      if (triggeredHiddenNodes.has(trigger.id)) continue;
+      const hasAllClues = trigger.requiredClueIds.every((id) => collectedClues.has(id));
+      const hasAllKeywords = trigger.requiredKeywordIds.every((id) => verifiedKeywords.has(id));
+      const hasAllDecodedLogs = trigger.requiredDecodedLogIds.every((id) => decodedLogs.has(id));
+      if (hasAllClues && hasAllKeywords && hasAllDecodedLogs) {
+        newlyTriggered.push(trigger.id);
+      }
+    }
+    if (newlyTriggered.length > 0) {
+      const newTriggered = new Set(triggeredHiddenNodes);
+      for (const id of newlyTriggered) {
+        newTriggered.add(id);
+      }
+      const currentPending = get().pendingHiddenTriggers;
+      set({
+        triggeredHiddenNodes: newTriggered,
+        pendingHiddenTriggers: [...currentPending, ...newlyTriggered],
+      });
+    }
+    return newlyTriggered;
+  },
+
+  dismissPendingTrigger: (triggerId) => {
+    const { pendingHiddenTriggers } = get();
+    set({ pendingHiddenTriggers: pendingHiddenTriggers.filter((id) => id !== triggerId) });
+  },
+
+  getClueById: (clueId) => {
+    return get().storyPackage?.evidenceClues?.find((c) => c.id === clueId) ?? null;
+  },
+
+  getLogById: (logId) => {
+    return get().storyPackage?.encodedLogs?.find((l) => l.id === logId) ?? null;
+  },
+
+  getTriggerById: (triggerId) => {
+    return get().storyPackage?.hiddenNodeTriggers?.find((t) => t.id === triggerId) ?? null;
   },
 }));

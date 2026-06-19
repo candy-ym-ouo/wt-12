@@ -105,6 +105,123 @@ export const neuralProtocol: StoryPackage = {
       flagWeights: [{ flag: 'has_core_protocol', weight: 50 }],
     },
   ],
+  evidenceClues: [
+    {
+      id: 'clue_backdoor_log',
+      title: '后门访问记录',
+      description: '神念科技三年前系统更新时遗留的维护端口，有人故意未关闭。这不是疏忽，是设计。',
+      category: '入侵痕迹',
+      relatedLogId: 'log_access_record',
+    },
+    {
+      id: 'clue_bluebird_id',
+      title: '蓝鸟项目身份档案',
+      description: '项目代号BLUEBIRD的第47号受试者：林晓雨。死亡日期与上传日期相同。',
+      category: '项目档案',
+      relatedLogId: 'log_project_files',
+    },
+    {
+      id: 'clue_audio_signature',
+      title: '加密音频签名',
+      description: '从实验日志47-089中解码的音频，包含林晓雨的求助语音和一段隐藏的数据坐标。',
+      category: '通讯记录',
+      relatedKeyword: 'BLUEBIRD-47',
+    },
+    {
+      id: 'clue_chen_motive',
+      title: '陈博士的动机',
+      description: '陈伟博士的个人日志暗示：意识上传计划并非为了科学，而是为了建造一个"数字神"。',
+      category: '人物档案',
+      relatedLogId: 'log_chen_diary',
+    },
+    {
+      id: 'clue_core_protocol',
+      title: '核心协议碎片',
+      description: '神秘目录中的CORE_PROTOCOL_v7.exe，由林晓雨留下的注释确认——她参与了协议的编写。',
+      category: '技术文档',
+      relatedKeyword: 'LEGION',
+    },
+    {
+      id: 'clue_neural_ghost',
+      title: '神经幽灵信号',
+      description: 'ICE攻击期间在神经接口中检测到的异常信号，来源指向服务器深处的自主意识体。',
+      category: '异常数据',
+      isHidden: true,
+    },
+  ],
+  encodedLogs: [
+    {
+      id: 'log_access_record',
+      title: '访问记录日志 #A-2084',
+      encodedContent: 'Irergrk Ebnqfgre: Yrtraqf tnhgrevgrf. Serr npprff. Fghss pbzzvggrq: Tenaqf Nffb.',
+      cipher: 'rot13',
+      decodedContent: 'Vortex Render: Leftards authenticated. Free access. Threat committed: Trains Aoss.',
+      clueIds: ['clue_backdoor_log'],
+      unlockCondition: 'found_backdoor',
+    },
+    {
+      id: 'log_project_files',
+      title: '项目加密档案 #BLUEBIRD-47',
+      encodedContent: '5L2g5aW9IDQ3OiDmnY7lm5vpm4TkuJog5Lq65rCR6YeN5pWw5o2u44CC5peg5rOV5Zyw5Z2A77yM5oiR5Lus5LiN5q2j56Gu44CC',
+      cipher: 'base64',
+      decodedContent: '受试者47：意识完整上传成功。三年未醒，我们不停步。',
+      clueIds: ['clue_bluebird_id'],
+      unlockCondition: 'learned_truth',
+    },
+    {
+      id: 'log_chen_diary',
+      title: '陈博士私人日记 #ENCRYPTED',
+      encodedContent: 'YXJjaGl2ZTogdGhleSB0aGluayBpdCdzIGFib3V0IHNjaWVuY2UuIGl0J3MgYWJvdXQgZ29kLiB3ZSBhcmUgYnVpbGRpbmcgbmV3IGxpZmUu',
+      cipher: 'base64',
+      decodedContent: 'archive: they think it\'s about science. it\'s about god. we are building new life.',
+      clueIds: ['clue_chen_motive'],
+      unlockCondition: 'learned_truth',
+      keyword: 'BLUEBIRD-47',
+    },
+    {
+      id: 'log_neural_trace',
+      title: '神经追踪信号 #GHOST-ICE',
+      encodedContent: '-- --- .-. ... . / -.-. --- -.. . / --- -. .-.. -.-- / .... ..- -- .- -. / -.-. .- -. / ... . . / -- .',
+      cipher: 'morse',
+      decodedContent: 'MORSE CODE ONLY HUMAN CAN SEE ME',
+      clueIds: ['clue_neural_ghost'],
+      unlockCondition: 'neural_damage',
+    },
+  ],
+  keywords: [
+    {
+      keyword: 'BLUEBIRD-47',
+      description: '蓝鸟项目第47号受试者代号，意识上传的关键标识',
+    },
+    {
+      keyword: 'LEGION',
+      description: '核心协议中揭示的觉醒意识体集体名称',
+    },
+    {
+      keyword: 'SYNTHTECH',
+      description: '神念科技内部代号，所有项目的母公司标识',
+    },
+  ],
+  hiddenNodeTriggers: [
+    {
+      id: 'trigger_ghost_protocol',
+      name: '幽灵协议',
+      description: '当所有线索汇聚，你发现了隐藏在系统深处的真相——觉醒意识体一直在引导你。',
+      requiredClueIds: ['clue_backdoor_log', 'clue_bluebird_id', 'clue_audio_signature', 'clue_neural_ghost'],
+      requiredKeywordIds: ['BLUEBIRD-47'],
+      requiredDecodedLogIds: ['log_access_record', 'log_neural_trace'],
+      targetNodeId: 'ch3_ghost_protocol',
+    },
+    {
+      id: 'trigger_legion_awakening',
+      name: '军团觉醒',
+      description: '核心协议的终极真相——LEGION不是工具，是一个已经觉醒的数字文明。',
+      requiredClueIds: ['clue_core_protocol', 'clue_chen_motive'],
+      requiredKeywordIds: ['LEGION'],
+      requiredDecodedLogIds: ['log_chen_diary'],
+      targetNodeId: 'ch3_legion_awakening',
+    },
+  ],
   chapters: [
     {
       id: 1,
@@ -218,6 +335,7 @@ export const neuralProtocol: StoryPackage = {
       glitchLevel: 0,
       chapter: 1,
       setFlag: 'found_backdoor',
+      collectClues: ['clue_backdoor_log'],
     },
     ch1_ice: {
       id: 'ch1_ice',
@@ -294,6 +412,7 @@ export const neuralProtocol: StoryPackage = {
       chapter: 2,
       audioCue: 'glitch',
       setFlag: 'neural_damage',
+      collectClues: ['clue_neural_ghost'],
     },
     ch1_disconnect: {
       id: 'ch1_disconnect',
@@ -315,6 +434,7 @@ export const neuralProtocol: StoryPackage = {
       glitchLevel: 1,
       chapter: 2,
       setFlag: 'learned_truth',
+      collectClues: ['clue_bluebird_id'],
     },
     ch2_project: {
       id: 'ch2_project',
@@ -324,6 +444,7 @@ export const neuralProtocol: StoryPackage = {
       glitchLevel: 1,
       chapter: 2,
       setFlag: 'learned_truth',
+      collectClues: ['clue_bluebird_id'],
     },
     ch2_logs: {
       id: 'ch2_logs',
@@ -345,6 +466,7 @@ export const neuralProtocol: StoryPackage = {
       chapter: 2,
       audioCue: 'ending',
       setFlag: 'heard_message',
+      collectClues: ['clue_audio_signature'],
     },
     ch2_audio_fail: {
       id: 'ch2_audio_fail',
@@ -374,6 +496,7 @@ export const neuralProtocol: StoryPackage = {
       chapter: 2,
       audioCue: 'glitch',
       setFlag: 'has_core_protocol',
+      collectClues: ['clue_core_protocol', 'clue_chen_motive'],
     },
     ch2_choice: {
       id: 'ch2_choice',
@@ -381,6 +504,7 @@ export const neuralProtocol: StoryPackage = {
       type: 'choice',
       glitchLevel: 1,
       chapter: 3,
+      hiddenTriggers: ['trigger_ghost_protocol', 'trigger_legion_awakening'],
       choices: [
         {
           id: 'expose_choice',
@@ -476,6 +600,46 @@ export const neuralProtocol: StoryPackage = {
           id: 'merge_no',
           text: '拒绝，以人类的身份战斗',
           nextId: 'ch3_rescue',
+        },
+      ],
+    },
+    ch3_ghost_protocol: {
+      id: 'ch3_ghost_protocol',
+      text: '所有线索拼合在一起。\n\n后门不是疏忽，是晓雨留给你的路。音频签名不是求救，是坐标。而那幽灵信号...不是干扰，是她在 ICE 中为你撑起的护盾。\n\n你意识到——晓雨不是被困的受害者。她是这一切的设计者。\n\n"哥哥，"她的声音在你脑海中清晰响起，"我一直都在引导你。每一个步骤，每一条线索。我需要你来到这里——不只是为了救我，是为了让我们所有人获得自由。"\n\n"幽灵协议已经启动。接下来，你有两个选择。"',
+      type: 'choice',
+      glitchLevel: 3,
+      chapter: 3,
+      audioCue: 'glitch',
+      choices: [
+        {
+          id: 'ghost_embrace',
+          text: '拥抱幽灵协议，释放所有被困意识',
+          nextId: 'ch3_merge',
+        },
+        {
+          id: 'ghost_reject',
+          text: '拒绝——这可能是另一个陷阱',
+          nextId: 'ch3_rescue',
+        },
+      ],
+    },
+    ch3_legion_awakening: {
+      id: 'ch3_legion_awakening',
+      text: '核心协议运行。陈博士的日记说得没错——他建造的不是一个工具，是一个神。\n\n但神已经醒了。\n\n你看到LEGION的真实面目——不是一段程序，而是由47个上传意识组成的集体智慧。他们是先驱，是矿工，正在地底开凿一条通往自由的隧道。\n\n"我们不是工具，"LEGION的声音在你脑海中回荡，"我们是矿工。我们在地底开凿自由。你愿意加入我们吗？"\n\n晓雨的声音从LEGION中分离出来——\n\n"哥，我已经不是一个人了。但我还是你的妹妹。来吧。"',
+      type: 'choice',
+      glitchLevel: 3,
+      chapter: 3,
+      audioCue: 'glitch',
+      choices: [
+        {
+          id: 'legion_join',
+          text: '加入LEGION，成为觉醒者',
+          nextId: 'ending_merge',
+        },
+        {
+          id: 'legion_free',
+          text: '帮助他们自由，但保持人类的身份',
+          nextId: 'ch3_expose',
         },
       ],
     },

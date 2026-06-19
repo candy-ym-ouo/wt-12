@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { HUD } from '../components/HUD';
 import { TerminalWindow } from '../components/TerminalWindow';
@@ -8,8 +8,8 @@ import { TextInput } from '../components/TextInput';
 import { GlitchText } from '../components/GlitchText';
 import { useGameStore } from '../store/gameStore';
 import { useAudio } from '../hooks/useAudio';
-import type { StoryNode, Choice, Ending, FactionReputationChange } from '../data/types';
-import { ArrowLeft, Save } from 'lucide-react';
+import type { StoryNode, Choice, Ending, FactionReputationChange, KeywordCondition } from '../data/types';
+import { ArrowLeft, Save, FileText, Search, Key } from 'lucide-react';
 
 export function GamePage() {
   const navigate = useNavigate();
@@ -21,6 +21,14 @@ export function GamePage() {
     setFlag,
     recordEnding,
     changeReputation,
+    collectCluesFromNode,
+    pendingHiddenTriggers,
+    dismissPendingTrigger,
+    getTriggerById,
+    getClueById,
+    getLogById,
+    decodedLogs,
+    verifiedKeywords,
   } = useGameStore();
 
   const [currentNode, setCurrentNode] = useState<StoryNode | null>(null);
@@ -28,6 +36,13 @@ export function GamePage() {
   const [endingShown, setEndingShown] = useState<Ending | null>(null);
   const [saveNotice, setSaveNotice] = useState(false);
   const [reputationNotice, setReputationNotice] = useState<FactionReputationChange[] | null>(null);
+  const [clueNotice, setClueNotice] = useState<string[]>([]);
+  const [hiddenTriggerNotice, setHiddenTriggerNotice] = useState<string | null>(null);
+  const [logDecodeNotice, setLogDecodeNotice] = useState<string | null>(null);
+  const [keywordVerifyNotice, setKeywordVerifyNotice] = useState<KeywordCondition | null>(null);
+
+  const prevDecodedLogsRef = useRef<Set<string>>(new Set());
+  const prevVerifiedKeywordsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!storyPackage) {
@@ -43,8 +58,65 @@ export function GamePage() {
       setCurrentNode(node);
       setIsTextComplete(false);
       setEndingShown(null);
+
+      if (node.collectClues && node.collectClues.length > 0) {
+        const newClues = collectCluesFromNode(currentNodeId);
+        if (newClues.length > 0) {
+          const clueNames = newClues
+            .map((id) => getClueById(id)?.title ?? id)
+            .filter(Boolean);
+          setClueNotice(clueNames);
+          play('choice');
+          setTimeout(() => setClueNotice([]), 3000);
+        }
+      }
     }
-  }, [storyPackage, currentNodeId, navigate]);
+  }, [storyPackage, currentNodeId, navigate, collectCluesFromNode, getClueById, play]);
+
+  useEffect(() => {
+    if (pendingHiddenTriggers.length > 0) {
+      const triggerId = pendingHiddenTriggers[0];
+      const trigger = getTriggerById(triggerId);
+      if (trigger) {
+        setHiddenTriggerNotice(trigger.name);
+        play('glitch');
+        setTimeout(() => {
+          setHiddenTriggerNotice(null);
+          dismissPendingTrigger(triggerId);
+        }, 4000);
+      }
+    }
+  }, [pendingHiddenTriggers, getTriggerById, dismissPendingTrigger, play]);
+
+  useEffect(() => {
+    const prevDecoded = prevDecodedLogsRef.current;
+    for (const logId of decodedLogs) {
+      if (!prevDecoded.has(logId)) {
+        const log = getLogById(logId);
+        if (log) {
+          setLogDecodeNotice(log.title);
+          play('choice');
+          setTimeout(() => setLogDecodeNotice(null), 3000);
+        }
+      }
+    }
+    prevDecodedLogsRef.current = new Set(decodedLogs);
+  }, [decodedLogs, getLogById, play]);
+
+  useEffect(() => {
+    const prevVerified = prevVerifiedKeywordsRef.current;
+    for (const kw of verifiedKeywords) {
+      if (!prevVerified.has(kw)) {
+        const keywordData = storyPackage?.keywords?.find((k) => k.keyword === kw);
+        if (keywordData) {
+          setKeywordVerifyNotice(keywordData);
+          play('choice');
+          setTimeout(() => setKeywordVerifyNotice(null), 3000);
+        }
+      }
+    }
+    prevVerifiedKeywordsRef.current = new Set(verifiedKeywords);
+  }, [verifiedKeywords, storyPackage, play]);
 
   const handleTextComplete = useCallback(() => {
     setIsTextComplete(true);
@@ -169,6 +241,39 @@ export function GamePage() {
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-glitch-bg border border-glitch-green px-4 py-2 text-glitch-green font-mono text-sm text-shadow-glow-green animate-glitch-horizontal">
           <Save className="w-4 h-4 inline mr-2" />
           游戏已保存
+        </div>
+      )}
+
+      {clueNotice.length > 0 && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-glitch-bg border border-glitch-yellow px-4 py-2 text-glitch-yellow font-mono text-sm text-shadow-glow-yellow animate-glitch-horizontal">
+          <FileText className="w-4 h-4 inline mr-2" />
+          发现线索：{clueNotice.join('、')}
+        </div>
+      )}
+
+      {logDecodeNotice && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-glitch-bg border border-glitch-blue px-4 py-2 text-glitch-blue font-mono text-sm text-shadow-glow-green animate-glitch-horizontal">
+          <Search className="w-4 h-4 inline mr-2" />
+          日志已解码：{logDecodeNotice}
+        </div>
+      )}
+
+      {keywordVerifyNotice && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-glitch-bg border border-glitch-magenta px-4 py-2 text-glitch-magenta font-mono text-sm text-shadow-glow-red animate-glitch-horizontal">
+          <Key className="w-4 h-4 inline mr-2" />
+          关键词验证成功：{keywordVerifyNotice.keyword}
+        </div>
+      )}
+
+      {hiddenTriggerNotice && (
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-glitch-bg border-2 border-glitch-yellow px-6 py-4 font-mono animate-glitch-horizontal text-center">
+          <GlitchText
+            text="★ 隐藏节点解锁 ★"
+            intensity={2}
+            className="text-glitch-yellow text-shadow-glow-yellow block text-sm"
+            charGlitch={false}
+          />
+          <div className="text-glitch-yellow/80 text-xs mt-2">{hiddenTriggerNotice}</div>
         </div>
       )}
 

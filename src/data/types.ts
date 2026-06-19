@@ -3,6 +3,49 @@ export interface FactionReputationChange {
   change: number;
 }
 
+export type CipherType = 'caesar' | 'rot13' | 'base64' | 'hex' | 'reverse' | 'xor' | 'morse';
+
+export interface EvidenceClue {
+  id: string;
+  title: string;
+  description: string;
+  category?: string;
+  icon?: string;
+  relatedLogId?: string;
+  relatedKeyword?: string;
+  isHidden?: boolean;
+}
+
+export interface EncodedLog {
+  id: string;
+  title: string;
+  encodedContent: string;
+  cipher: CipherType;
+  cipherKey?: string;
+  decodedContent: string;
+  clueIds?: string[];
+  keyword?: string;
+  isAvailable?: boolean;
+  unlockCondition?: string;
+}
+
+export interface KeywordCondition {
+  keyword: string;
+  caseSensitive?: boolean;
+  description?: string;
+}
+
+export interface HiddenNodeTrigger {
+  id: string;
+  name: string;
+  description?: string;
+  requiredClueIds: string[];
+  requiredKeywordIds: string[];
+  requiredDecodedLogIds: string[];
+  targetNodeId: string;
+  isTriggered?: boolean;
+}
+
 export interface ReputationCondition {
   factionId: string;
   minReputation?: number;
@@ -87,6 +130,9 @@ export interface StoryNode {
   setFlag?: string;
   audioCue?: 'typing' | 'glitch' | 'ambient' | 'ending' | 'none';
   reputationChanges?: FactionReputationChange[];
+  collectClues?: string[];
+  unlockLogId?: string;
+  hiddenTriggers?: string[];
 }
 
 export interface StoryPackage {
@@ -106,6 +152,10 @@ export interface StoryPackage {
   chapters: ChapterMetadata[];
   factions?: Faction[];
   endingWeights?: EndingWeight[];
+  evidenceClues?: EvidenceClue[];
+  encodedLogs?: EncodedLog[];
+  keywords?: KeywordCondition[];
+  hiddenNodeTriggers?: HiddenNodeTrigger[];
 }
 
 export interface StoryPackageSummary {
@@ -143,6 +193,10 @@ export interface SaveData {
   playHistory: HistoryEntry[];
   savedAt: number;
   reputation: FactionReputation;
+  collectedClues: string[];
+  decodedLogs: string[];
+  verifiedKeywords: string[];
+  triggeredHiddenNodes: string[];
 }
 
 export interface FactionStats {
