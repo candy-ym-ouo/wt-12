@@ -1,19 +1,25 @@
-import type { SaveData, GameStats } from '../data/types';
+import type { SaveData, GameStats, AllStats } from '../data/types';
 
-const SAVE_KEY = 'glitch_adventure_save';
-const STATS_KEY = 'glitch_adventure_stats';
+const SAVE_KEY_PREFIX = 'glitch_adventure_save_';
+const ALL_STATS_KEY = 'glitch_adventure_all_stats';
+
+function getSaveKey(storyPackageId: string): string {
+  return `${SAVE_KEY_PREFIX}${storyPackageId}`;
+}
 
 export function saveGame(data: SaveData): void {
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    const key = getSaveKey(data.storyPackageId);
+    localStorage.setItem(key, JSON.stringify(data));
   } catch (e) {
     console.error('Failed to save game:', e);
   }
 }
 
-export function loadGame(): SaveData | null {
+export function loadGame(storyPackageId: string): SaveData | null {
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
+    const key = getSaveKey(storyPackageId);
+    const raw = localStorage.getItem(key);
     if (!raw) return null;
     return JSON.parse(raw) as SaveData;
   } catch (e) {
@@ -22,55 +28,115 @@ export function loadGame(): SaveData | null {
   }
 }
 
-export function hasSave(): boolean {
-  return localStorage.getItem(SAVE_KEY) !== null;
+export function hasSave(storyPackageId: string): boolean {
+  const key = getSaveKey(storyPackageId);
+  return localStorage.getItem(key) !== null;
 }
 
-export function deleteSave(): void {
-  localStorage.removeItem(SAVE_KEY);
-}
-
-export function getStats(): GameStats {
-  try {
-    const raw = localStorage.getItem(STATS_KEY);
-    if (!raw) {
-      return { totalPlays: 0, endingsUnlocked: [], totalEndings: 0 };
+export function getAnySave(): { storyPackageId: string; save: SaveData } | null {
+  const keys = Object.keys(localStorage);
+  for (const key of keys) {
+    if (key.startsWith(SAVE_KEY_PREFIX)) {
+      const storyPackageId = key.replace(SAVE_KEY_PREFIX, '');
+      const save = loadGame(storyPackageId);
+      if (save) {
+        return { storyPackageId, save };
+      }
     }
-    return JSON.parse(raw) as GameStats;
-  } catch {
-    return { totalPlays: 0, endingsUnlocked: [], totalEndings: 0 };
+  }
+  return null;
+}
+
+export function deleteSave(storyPackageId: string): void {
+  const key = getSaveKey(storyPackageId);
+  localStorage.removeItem(key);
+}
+
+export function deleteAllSaves(): void {
+  const keys = Object.keys(localStorage);
+  for (const key of keys) {
+    if (key.startsWith(SAVE_KEY_PREFIX)) {
+      localStorage.removeItem(key);
+    }
   }
 }
 
-export function updateStats(updates: Partial<GameStats>): GameStats {
-  const current = getStats();
+export function getAllStats(): AllStats {
+  try {
+    const raw = localStorage.getItem(ALL_STATS_KEY);
+    if (!raw) {
+      return {};
+    }
+    return JSON.parse(raw) as AllStats;
+  } catch {
+    return {};
+  }
+}
+
+export function getStats(storyPackageId: string): GameStats {
+  const allStats = getAllStats();
+  return (
+    allStats[storyPackageId] ?? {
+      storyPackageId,
+      totalPlays: 0,
+      endingsUnlocked: [],
+      totalEndings: 0,
+      completedChapters: [],
+      totalPlayTime: 0,
+    }
+  );
+}
+
+export function updateStats(
+  storyPackageId: string,
+  updates: Partial<GameStats>
+): GameStats {
+  const allStats = getAllStats();
+  const current = getStats(storyPackageId);
   const merged: GameStats = {
     ...current,
     ...updates,
+    storyPackageId,
     endingsUnlocked: updates.endingsUnlocked ?? current.endingsUnlocked,
+    completedChapters: updates.completedChapters ?? current.completedChapters,
   };
-  localStorage.setItem(STATS_KEY, JSON.stringify(merged));
+  allStats[storyPackageId] = merged;
+  localStorage.setItem(ALL_STATS_KEY, JSON.stringify(allStats));
   return merged;
 }
 
-export function unlockEnding(endingId: string): string[] {
-  const stats = getStats();
+export function unlockEnding(storyPackageId: string, endingId: string): string[] {
+  const stats = getStats(storyPackageId);
   if (!stats.endingsUnlocked.includes(endingId)) {
     stats.endingsUnlocked.push(endingId);
-    localStorage.setItem(STATS_KEY, JSON.stringify(stats));
+    updateStats(storyPackageId, stats);
   }
   return stats.endingsUnlocked;
 }
 
-export function incrementPlayCount(): number {
-  const stats = getStats();
+export function incrementPlayCount(storyPackageId: string): number {
+  const stats = getStats(storyPackageId);
   stats.totalPlays += 1;
-  localStorage.setItem(STATS_KEY, JSON.stringify(stats));
+  updateStats(storyPackageId, stats);
   return stats.totalPlays;
 }
 
-export function setTotalEndings(count: number): void {
-  const stats = getStats();
-  stats.totalEndings = count;
-  localStorage.setItem(STATS_KEY, JSON.stringify(stats));
+export function setTotalEndings(storyPackageId: string, count: number): void {
+  updateStats(storyPackageId, { totalEndings: count });
+}
+
+export function completeChapter(storyPackageId: string, chapterId: number): number[] {
+  const stats = getStats(storyPackageId);
+  if (!stats.completedChapters.includes(chapterId)) {
+    stats.completedChapters.push(chapterId);
+    updateStats(storyPackageId, stats);
+  }
+  return stats.completedChapters;
+}
+
+export function addPlayTime(storyPackageId: string, seconds: number): number {
+  const stats = getStats(storyPackageId);
+  stats.totalPlayTime += seconds;
+  updateStats(storyPackageId, stats);
+  return stats.totalPlayTime;
 }

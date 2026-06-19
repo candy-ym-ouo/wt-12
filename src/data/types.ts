@@ -13,6 +13,17 @@ export interface Ending {
   isHidden?: boolean;
 }
 
+export interface ChapterMetadata {
+  id: number;
+  title: string;
+  subtitle?: string;
+  description?: string;
+  estimatedDuration?: string;
+  themes?: string[];
+  isUnlocked?: boolean;
+  totalNodes?: number;
+}
+
 export interface StoryNode {
   id: string;
   text: string;
@@ -32,10 +43,32 @@ export interface StoryNode {
 export interface StoryPackage {
   id: string;
   title: string;
+  subtitle?: string;
   description: string;
+  coverImage?: string;
+  author?: string;
+  createdAt?: string;
+  difficulty?: 'easy' | 'normal' | 'hard';
+  genre?: string[];
+  estimatedPlaytime?: string;
   startNodeId: string;
   nodes: Record<string, StoryNode>;
   endings: Ending[];
+  chapters: ChapterMetadata[];
+}
+
+export interface StoryPackageSummary {
+  id: string;
+  title: string;
+  subtitle?: string;
+  description: string;
+  coverImage?: string;
+  author?: string;
+  difficulty?: 'easy' | 'normal' | 'hard';
+  genre?: string[];
+  estimatedPlaytime?: string;
+  totalEndings: number;
+  totalChapters: number;
 }
 
 export interface HistoryEntry {
@@ -45,6 +78,7 @@ export interface HistoryEntry {
 }
 
 export interface SaveData {
+  storyPackageId: string;
   currentNodeId: string;
   chapter: number;
   flags: string[];
@@ -54,7 +88,14 @@ export interface SaveData {
 }
 
 export interface GameStats {
+  storyPackageId: string;
   totalPlays: number;
   endingsUnlocked: string[];
   totalEndings: number;
+  completedChapters: number[];
+  totalPlayTime: number;
+}
+
+export interface AllStats {
+  [storyPackageId: string]: GameStats;
 }

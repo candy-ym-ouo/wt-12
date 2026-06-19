@@ -1,10 +1,49 @@
 import type { StoryPackage } from './types';
 
-export const sampleStory: StoryPackage = {
+export const neuralProtocol: StoryPackage = {
   id: 'neural-protocol',
   title: 'GLITCH://神经网络协议',
+  subtitle: 'Neural Protocol',
   description: '2087年，你是一名神经黑客。一次看似普通的数据窃取任务，却让你发现了一个足以颠覆世界的秘密...',
+  author: 'Glitch Workshop',
+  createdAt: '2087-01-15',
+  difficulty: 'normal',
+  genre: ['赛博朋克', '悬疑', '科幻'],
+  estimatedPlaytime: '15-30 分钟',
+  coverImage: '',
   startNodeId: 'intro_1',
+  chapters: [
+    {
+      id: 1,
+      title: '第一章：数据窃取',
+      subtitle: 'The Heist',
+      description: '今夜的任务看起来和往常一样——潜入神念科技的数据库，窃取一份被标记为"蓝鸟"的实验数据。但事情永远不会那么简单...',
+      estimatedDuration: '5-10 分钟',
+      themes: ['潜入', '选择', '黑客技术'],
+      isUnlocked: true,
+      totalNodes: 6,
+    },
+    {
+      id: 2,
+      title: '第二章：真相浮出',
+      subtitle: 'The Truth',
+      description: '"蓝鸟"不是一个项目，它是一个人——你的妹妹林晓雨。三年前被报道在实验室意外中死亡，但她的意识还活着...',
+      estimatedDuration: '5-10 分钟',
+      themes: ['亲情', '探索', '真相'],
+      isUnlocked: false,
+      totalNodes: 5,
+    },
+    {
+      id: 3,
+      title: '第三章：最终抉择',
+      subtitle: 'The Final Choice',
+      description: '你已经知道了真相。现在，你必须决定如何面对这一切——揭露真相？救出妹妹？还是...成为新的存在？',
+      estimatedDuration: '5-10 分钟',
+      themes: ['抉择', '牺牲', '升华'],
+      isUnlocked: false,
+      totalNodes: 7,
+    },
+  ],
   endings: [
     {
       id: 'ending_corrupt',

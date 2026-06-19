@@ -1,34 +1,60 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Terminal, Play, BookOpen, Trophy } from 'lucide-react';
+import { Terminal, Play, BookOpen, Trophy, Layers, Archive } from 'lucide-react';
 import { GlitchText } from '../components/GlitchText';
 import { TerminalWindow } from '../components/TerminalWindow';
 import { useGameStore } from '../store/gameStore';
-import { sampleStory } from '../data/sampleStory';
-import { hasSave } from '../utils/storage';
+import { getAnySave, getAllStats } from '../utils/storage';
+import { storyPackageSummaries } from '../data/index';
 
 export function StartPage() {
   const navigate = useNavigate();
-  const { setStoryPackage, startNewGame, continueGame } = useGameStore();
-  const [canContinue, setCanContinue] = useState(false);
+  const { clearStoryPackage } = useGameStore();
+  const [canContinue, setCanContinue] = useState<string | null>(null);
   const [showTitle, setShowTitle] = useState(false);
+  const [totalStats, setTotalStats] = useState({
+    totalStories: 0,
+    totalEndings: 0,
+    unlockedEndings: 0,
+    totalPlays: 0,
+  });
 
   useEffect(() => {
-    setStoryPackage(sampleStory);
-    setCanContinue(hasSave());
+    clearStoryPackage();
+    const save = getAnySave();
+    if (save) {
+      setCanContinue(save.storyPackageId);
+    }
+    const allStats = getAllStats();
+    const totalEndings = storyPackageSummaries.reduce(
+      (sum, s) => sum + s.totalEndings,
+      0
+    );
+    const unlockedEndings = Object.values(allStats).reduce(
+      (sum, s) => sum + s.endingsUnlocked.length,
+      0
+    );
+    const totalPlays = Object.values(allStats).reduce(
+      (sum, s) => sum + s.totalPlays,
+      0
+    );
+    setTotalStats({
+      totalStories: storyPackageSummaries.length,
+      totalEndings,
+      unlockedEndings,
+      totalPlays,
+    });
     const timer = setTimeout(() => setShowTitle(true), 200);
     return () => clearTimeout(timer);
-  }, [setStoryPackage]);
+  }, [clearStoryPackage]);
 
-  const handleNewGame = () => {
-    startNewGame();
-    navigate('/game');
+  const handleStories = () => {
+    navigate('/stories');
   };
 
   const handleContinue = () => {
-    if (continueGame()) {
-      navigate('/game');
-    }
+    if (!canContinue) return;
+    navigate('/stories');
   };
 
   const handleEndings = () => {
@@ -55,29 +81,56 @@ export function StartPage() {
                 charGlitch={false}
               />
               <GlitchText
-                text="神经网络协议"
+                text="互动叙事档案中心"
                 intensity={1.5}
                 className="font-display text-2xl sm:text-4xl text-glitch-magenta text-shadow-glow-red block mt-2"
                 charGlitch={false}
               />
             </div>
             <p className="text-center text-glitch-blue/70 text-sm sm:text-base mt-6 font-mono text-shadow-glow-blue">
-              {'>'} 2087年 / 赛博空间 / 神经接口已就绪
+              {'>'} 多剧本档案系统已就绪 / 共 {totalStats.totalStories} 个剧本
             </p>
           </div>
 
+          <div className="grid grid-cols-3 gap-4 w-full max-w-md">
+            <div className="text-center p-3 border border-glitch-green/20">
+              <div className="text-glitch-yellow text-2xl font-display text-shadow-glow-yellow">
+                {totalStats.unlockedEndings}
+              </div>
+              <div className="text-glitch-green/50 text-xs font-mono mt-1">
+                已解锁结局
+              </div>
+            </div>
+            <div className="text-center p-3 border border-glitch-green/20">
+              <div className="text-glitch-blue text-2xl font-display text-shadow-glow-blue">
+                {totalStats.totalEndings}
+              </div>
+              <div className="text-glitch-green/50 text-xs font-mono mt-1">
+                结局总数
+              </div>
+            </div>
+            <div className="text-center p-3 border border-glitch-green/20">
+              <div className="text-glitch-magenta text-2xl font-display text-shadow-glow-red">
+                {totalStats.totalPlays}
+              </div>
+              <div className="text-glitch-green/50 text-xs font-mono mt-1">
+                总游玩次数
+              </div>
+            </div>
+          </div>
+
           <div className="text-glitch-green/60 text-sm font-mono max-w-md text-center leading-relaxed">
-            你是一名地下神经黑客。一次普通的任务，揭开了一个被掩埋三年的秘密。
-            你的妹妹——她还活着，以数据的形式...
+            欢迎来到互动叙事档案中心。这里收录了多个风格迥异的互动故事，
+            每个剧本都有独立的存档系统和结局收集。选择一个故事，开启你的冒险吧。
           </div>
 
           <div className="flex flex-col gap-3 w-full max-w-sm mt-4">
             <button
-              onClick={handleNewGame}
+              onClick={handleStories}
               className="glitch-btn flex items-center justify-center gap-3 !py-4"
             >
-              <Play className="w-5 h-5" />
-              <span>开始新游戏</span>
+              <Archive className="w-5 h-5" />
+              <span>剧本档案中心</span>
             </button>
 
             {canContinue && (
@@ -102,8 +155,8 @@ export function StartPage() {
           </div>
 
           <div className="text-xs text-glitch-green/40 font-mono mt-4 flex items-center gap-2">
-            <BookOpen className="w-3 h-3" />
-            <span>提示：点击文字可跳过打字动画 | 输入关键词解锁隐藏剧情</span>
+            <Layers className="w-3 h-3" />
+            <span>提示：每个剧本都有独立的存档 | 探索隐藏路线解锁真结局</span>
           </div>
         </div>
       </TerminalWindow>
